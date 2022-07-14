@@ -36,7 +36,10 @@ if __name__ == '__main__':
     url = "tcp://"+sys.argv[1] + ":"+sys.argv[2]
     socket.connect(url)
 
-    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+    if(sys.argv[3] == 'cpu'):
+        device = 'cpu'
+    else:
+        device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     print(device)
     # device = 'cpu'
 
