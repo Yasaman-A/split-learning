@@ -1,3 +1,11 @@
+
+"""
+arg1 --> SERVER_IP
+arg2 --> SERVER_PORT
+arg3 --> 'cpu' or 'gpu'
+arg4 --> client number
+"""
+
 import torchvision
 import torchvision.transforms as transforms
 import torch.nn as nn
@@ -12,6 +20,7 @@ from convert import array_to_bytes, bytes_to_array, ordered_dict_to_bytes, bytes
 
 import logging
 from sys import getsizeof
+import sys
 # from objsize import get_deep_size
 
 # Create and configure logger
@@ -28,8 +37,11 @@ logger.setLevel(logging.INFO)
 
 if __name__ == '__main__':
 
-    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-    device = 'cpu'
+    if(sys.argv[3] == 'cpu'):
+        device = 'cpu'
+    else:
+        device = torch.device(
+            'cuda') if torch.cuda.is_available() else torch.device('cpu')
     print(device)
 
     transform = transforms.Compose(
@@ -83,7 +95,7 @@ if __name__ == '__main__':
         client_model.parameters(), lr=0.01, momentum=0.9)
 
 
-    client_num = 0                             ## Very Imp, type manually type client num
+    client_num = int(sys.argv[4])                             ## Very Imp, type manually type client num
     num_epochs = 50                            ## to be manually fixed..
     for epoch in range(num_epochs):
         print("EPOCH NO in client:- ", epoch)
@@ -97,7 +109,8 @@ if __name__ == '__main__':
         #  Socket to talk to server
         print("Connecting to hello world server…")
         socket = context.socket(zmq.REQ)
-        socket.connect("tcp://localhost:5555")
+        url = "tcp://"+sys.argv[1] + ":"+sys.argv[2]
+        socket.connect(url)
         # socket.connect("tcp://35.237.244.119:5555")
 
 
@@ -115,9 +128,9 @@ if __name__ == '__main__':
         weights = socket.recv()
         print("Weights recieved")
 
-        if client_num ==0 and epoch == 0:
+        if client_num == 0 and epoch == 0:
             decoded_msg = weights.decode()
-            if decoded_msg == "sagar":
+            if decoded_msg == "initial_start":
                 None
         
         else:
@@ -130,7 +143,7 @@ if __name__ == '__main__':
 
         for i, data in enumerate(trainloader, 0):
             ## Extra #####
-            if i==5:
+            if i == 5:
                 break
             ##############
             print(i)

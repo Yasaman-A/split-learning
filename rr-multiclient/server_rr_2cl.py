@@ -1,3 +1,10 @@
+
+"""
+arg1 --> total number of clients
+arg2 --> STARTING_PORT_NO
+arg3 --> 'cpu' or 'gpu'
+"""
+
 import torchvision
 import torchvision.transforms as transforms
 import torch.nn as nn
@@ -9,15 +16,17 @@ import time
 import zmq
 import torch
 from convert import bytes_to_array, array_to_bytes
+import sys
 
 
 if __name__ == '__main__':
 
 
     ##################################################################################################################
-    device = torch.device(
-        'cuda') if torch.cuda.is_available() else torch.device('cpu')
-    device = 'cpu'
+    if(sys.argv[3] == 'cpu'):
+        device = 'cpu'
+    else:
+        device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     print(device)
 
     class ResNet18Server(nn.Module):
@@ -54,12 +63,16 @@ if __name__ == '__main__':
     server_optimizer = optim.SGD(
         server_model.parameters(), lr=0.01, momentum=0.9)
 
+    # change depending on clients
+    total_client_num = int(sys.argv[1])
 
-    total_client_num = 2                    # change depending on clients
-
-    clients_connection_url = ["tcp://*:5555", "tcp://*:5556"]        # manually type the IPs of the client.
+    # clients_connection_url = ["tcp://*:5555", "tcp://*:5556"]        # manually type the IPs of the client.
+    port_no = int(sys.argv[2])
+    clients_connection_url = ["tcp://*:" + str(port_no+i) for i in range(total_client_num)]
     client_weights = [None] * total_client_num
-    active_client_num = 0
+
+    msg = "Starting the server"
+    send_msg = msg.encode()
 
     num_epochs = 50                ## fixed manually, if changed inform all clients
     for epoch in range(num_epochs):
@@ -78,16 +91,11 @@ if __name__ == '__main__':
             recv_iterations = int(iterations.decode())
             print(recv_iterations)
 
-            # names = "sagar"
-            # send_names = names.encode()
-            # socket.send(send_names)
-
             # Logic to transfer the weights from the previous client
 
             if total_client_num == 1:
-                names = "sagar"
-                send_names = names.encode()
-                socket.send(send_names)
+
+                socket.send(send_msg)
 
             else:
                 if client_num == 0:
@@ -100,7 +108,7 @@ if __name__ == '__main__':
                         # print("Loaded client {}'s weight successfully".format(prev_client))
 
                     else:
-                        names = "sagar"
+                        names = "initial_start"
                         send_names = names.encode()
                         socket.send(send_names)
                 
@@ -112,12 +120,6 @@ if __name__ == '__main__':
                     # print("Loaded client {}'s weight successfully".format(prev_client))
 
             print("MODEL SENT")
-
-
-
-
-
-
 
             for j in range(recv_iterations):
                 ## Extra #####
@@ -135,9 +137,7 @@ if __name__ == '__main__':
                 # print("labels_recieved")
 
                 ##dummy......
-                names = "sagar"
-                send_names = names.encode()
-                socket.send(send_names)
+                socket.send(send_msg)
 
                 # print("inside for for")
                 recv_serv_inputs = socket.recv()
@@ -176,9 +176,6 @@ if __name__ == '__main__':
             names = "weights_received"
             send_names = names.encode()
             socket.send(send_names)
-
-
-
 
             socket.close()
             context.term()
