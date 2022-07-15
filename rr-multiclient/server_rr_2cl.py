@@ -5,6 +5,8 @@ arg2 --> STARTING_PORT_NO
 arg3 --> 'cpu' or 'gpu'
 """
 
+# eg command: python server_rr_2cl.py 2 5555 cpu
+
 import torchvision
 import torchvision.transforms as transforms
 import torch.nn as nn

@@ -6,6 +6,9 @@ arg3 --> 'cpu' or 'gpu'
 arg4 --> client number
 """
 
+# eg command: python client_rr_2cl.py localhost 5555 cpu 0
+# eg command: python client_rr_2cl.py localhost 5556 cpu 1
+
 import torchvision
 import torchvision.transforms as transforms
 import torch.nn as nn
@@ -24,7 +27,7 @@ import sys
 # from objsize import get_deep_size
 
 # Create and configure logger
-logging.basicConfig(filename="client1_newfile.log",
+logging.basicConfig(filename="client"+sys.argv[4]+"_newfile.log",
                     format='%(asctime)s %(message)s',
                     filemode='a')
 
