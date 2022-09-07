@@ -12,7 +12,13 @@ arg9 --> batch_size
 arg10 --> round
 arg11 --> FED_SERVER_IP
 arg12 --> FED_SERVER_PORT
+
+arg13 --> classes_pc
+classes_pc: classes per client, it is used to divide the balanced dataset to non-IID dataset by creating an unbalanced representation of classes among the clients. For e.g., if the classes_pc=1, then all the clients will have images from one class only, thus creating an extensive imbalance among the clients. (Ref: Figure 2 )
+
 """
+classes_pc = int(sys.argv[13])
+num_clients = int(sys.argv[8])+1
 
 # eg command: python client_splitnn.py localhost 5555 cpu 0 3 10 1 0 128
 # eg command: python client_splitnn.py localhost 5556 cpu 1 3 10
@@ -78,6 +84,7 @@ if __name__ == '__main__':
     if (sys.argv[7] == 'n'):
         trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
                                                   shuffle=True, num_workers=2)
+        print('trainloader:' + str(len(trainloader)))
         datasetsize_used = len(trainset)
 
     else:
@@ -89,11 +96,10 @@ if __name__ == '__main__':
 
         use_indices = list_of_indices[int(sys.argv[8])]
         datasetsize_used = len(use_indices)
-        # print(use_indices)
+        print('use_indices:' + str(use_indices))
 
-        trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
-                                                  num_workers=2, sampler=use_indices)  # shuffle=True (mutually exclusive with sampler)
-    # print(len(trainloader))
+        trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, num_workers=2, sampler=use_indices)  # shuffle=True (mutually exclusive with sampler)
+        print('trainloader:' + str(len(trainloader)))
     # exit()
 
     testset = torchvision.datasets.CIFAR10(root='./data', train=False,
