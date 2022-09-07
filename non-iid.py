@@ -9,18 +9,23 @@ from torch.utils.data.dataset import Dataset
 from torchvision import transforms
 from torchvision.transforms import Compose
 torch.backends.cudnn.benchmark = True
+import sys
 
 
-classes_pc = 2
-num_clients = 5
-batch_size = 256
-real_wd = False  # False: non_iid dataset, True: Real-world dataset
+classes_pc = int(sys.argv[1])
+num_clients = int(sys.argv[2])
+batch_size = int(sys.argv[3])
+
+##Not used 
+#real_wd = True#sys.argv[4].lower() == 'true'  # False: non_iid dataset, True: Real-world dataset
 
 
 """
 classes_pc: classes per client, it is used to divide the balanced dataset to non-IID dataset by creating an unbalanced representation of classes among the clients. For e.g., if the classes_pc=1, then all the clients will have images from one class only, thus creating an extensive imbalance among the clients. (Ref: Figure 2 )
 num_clients: Total number of clients among which images are to be distributed.
 batch_size: Loading of the data into the data loader by batches.
+
+## Not used
 real_wd: We are creating two types of datasets, one is the real-world dataset (Figure 1) and another is the extreme non-IID dataset (Figure 2). If real_wd is TRUE then dataset replicating real-life is created, i.e. real-world dataset (figure 1). If real_wd is FALSE (by default) then the extreme non-IID dataset is created.
 
 """
@@ -323,9 +328,14 @@ train_loader, test_loader = get_data_loaders(classes_pc=classes_pc, nclients=num
                                                       batch_size=batch_size, verbose=True)
 
 
-print(len(train_loader[0]))
-print(len(train_loader[1]))
-print(len(train_loader[2]))
-print(len(train_loader[3]))
-print(len(train_loader[4]))
-print(len(test_loader))
+#print(len(train_loader[0]))
+#print(len(train_loader[1]))
+#print(len(train_loader[2]))
+#print(len(train_loader[3]))
+#print("tra loader length:" + len(train_loader[4]))
+
+for i in range(num_clients):
+    print("train loader length" + str(i) +": " +  str(len(train_loader[i])))
+print("test loader length: " +  str(len(test_loader)))
+
+
