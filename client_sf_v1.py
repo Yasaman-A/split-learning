@@ -13,12 +13,8 @@ arg10 --> round
 arg11 --> FED_SERVER_IP
 arg12 --> FED_SERVER_PORT
 
-arg13 --> classes_pc
-classes_pc: classes per client, it is used to divide the balanced dataset to non-IID dataset by creating an unbalanced representation of classes among the clients. For e.g., if the classes_pc=1, then all the clients will have images from one class only, thus creating an extensive imbalance among the clients. (Ref: Figure 2 )
-
 """
-classes_pc = int(sys.argv[13])
-num_clients = int(sys.argv[8])+1
+
 
 # eg command: python client_splitnn.py localhost 5555 cpu 0 3 10 1 0 128
 # eg command: python client_splitnn.py localhost 5556 cpu 1 3 10
