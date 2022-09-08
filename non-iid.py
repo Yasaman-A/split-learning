@@ -10,6 +10,7 @@ from torchvision import transforms
 from torchvision.transforms import Compose
 torch.backends.cudnn.benchmark = True
 import sys
+import pickle
 
 
 classes_pc = int(sys.argv[1])
@@ -327,7 +328,8 @@ def get_data_loaders(nclients,batch_size,classes_pc=10 ,verbose=True ):
 train_loader, test_loader = get_data_loaders(classes_pc=classes_pc, nclients=num_clients,
                                                       batch_size=batch_size, verbose=True)
 
-
+with open('output.pickle', 'wb') as handle:
+    pickle.dump(train_loader, handle, protocol=pickle.HIGHEST_PROTOCOL)
 #print(len(train_loader[0]))
 #print(len(train_loader[1]))
 #print(len(train_loader[2]))
