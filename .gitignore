@@ -1,7 +1,12 @@
+<<<<<<< HEAD
 *.pickle
 data/
 
 
+=======
+*.swp
+**/*.swp
+>>>>>>> base_model
 .DS_Store
 **/.DS_Store
 
