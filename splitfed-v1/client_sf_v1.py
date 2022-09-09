@@ -6,13 +6,13 @@ arg3 --> 'cpu' or 'gpu'
 arg4 --> client number/thread no
 arg5 --> cut_layer
 arg6 --> epoch
-arg7 --> split_parts, if on split type 'n' or '1'
+arg7 --> split_parts, if on split type 'n', 's', or a number
 arg8 --> split_no, starts from 0
 arg9 --> batch_size
 arg10 --> round
 arg11 --> FED_SERVER_IP
 arg12 --> FED_SERVER_PORT
-
+arg13 --> DATA_SERVER_ADDRESS
 """
 
 
@@ -36,6 +36,8 @@ from sys import getsizeof
 import numpy as np
 import pickle
 from torch.utils.data.dataset import Dataset
+import urllib.request
+import os
 
 
 import logging
@@ -112,6 +114,9 @@ if __name__ == '__main__':
         print('trainloader:' + str(len(trainloader)))
         datasetsize_used = len(trainset)
     elif (sys.argv[7] == 's'):
+        if os.path.exists("output.pickle"):
+            os.remove("output.pickle")
+        urllib.request.urlretrieve(sys.argv[13]+"/output.pickle", "output.pickle")
         with open('output.pickle', 'rb') as handle:
             trainloaders = pickle.load(handle)
             trainloader = trainloaders[atoi(sys.argv[4])]
