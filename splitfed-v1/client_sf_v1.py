@@ -38,10 +38,19 @@ import pickle
 from torch.utils.data.dataset import Dataset
 import urllib.request
 import os
-
-
+import yaml
 import logging
 # from objsize import get_deep_size
+
+with open(sys.argv[1], "r") as yamlfile:
+    data = yaml.load(yamlfile, Loader=yaml.FullLoader)
+    print("Read successful")
+# print(data)
+print(data["fed"])
+print(data["fed"]["ip"])
+sys.exit(0)
+
+
 
 # Create and configure logger
 logging.basicConfig(filename="./client_thread_" + sys.argv[4] + "_" + sys.argv[2] + "_" + sys.argv[3] + "_" + sys.argv[5] + "_" + sys.argv[6] + "_" + sys.argv[7] + "_" + sys.argv[8] + "_" + sys.argv[9] + "_" + sys.argv[10] + "_" + sys.argv[12] + ".log",
@@ -81,6 +90,11 @@ class CustomImageDataset(Dataset):
 
 
 if __name__ == '__main__':
+    with open(sys.argv[1], "r") as yamlfile:
+        data = yaml.load(yamlfile, Loader=yaml.FullLoader)
+        print("Read successful")
+    print(data)
+    sys.exit(0)
 
     logging.info('Parameters (SF_CLIENT_LOG) ---------- [SERVER_PORT --> {}, DEVICE_TYPE --> {}, CLIENT_NO --> {}, CUT_LAYER --> {}, EPOCHS --> {}, SPLIT_PARTS --> {}, PART_NO --> {}, BATCH_SIZE --> {}, ROUNDS --> {}, FED_SERVER_PORT --> {}] ---------- '.format(
         sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8], sys.argv[9], sys.argv[10], sys.argv[12]))

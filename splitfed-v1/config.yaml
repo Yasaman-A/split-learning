@@ -1,0 +1,7 @@
+data:
+  server_address: http://127.0.0.1:8000
+fed:
+  ip: 1234
+  port: 4567
+general:
+  hello: world!
