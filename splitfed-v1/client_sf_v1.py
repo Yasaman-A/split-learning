@@ -19,6 +19,7 @@ arg12 --> FED_SERVER_PORT
 # eg command: python client_splitnn.py localhost 5555 cpu 0 3 10 1 0 128
 # eg command: python client_splitnn.py localhost 5556 cpu 1 3 10
 
+from locale import atoi
 import torchvision
 import torchvision.transforms as transforms
 import torch.nn as nn
@@ -33,6 +34,9 @@ from convert import array_to_bytes, bytes_to_array, ordered_dict_to_bytes, bytes
 import sys
 from sys import getsizeof
 import numpy as np
+import pickle
+from torch.utils.data.dataset import Dataset
+
 
 import logging
 # from objsize import get_deep_size
@@ -49,11 +53,36 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
+class CustomImageDataset(Dataset):
+    '''
+    A custom Dataset class for images
+    inputs : numpy array [n_data x shape]
+    labels : numpy array [n_data (x 1)]
+    '''
+    def __init__(self, inputs, labels, transforms=None):
+        assert inputs.shape[0] == labels.shape[0]
+        self.inputs = torch.Tensor(inputs)
+        self.labels = torch.Tensor(labels).long()
+        self.transforms = transforms 
+
+    def __getitem__(self, index):
+        img, label = self.inputs[index], self.labels[index]
+
+        if self.transforms is not None:
+            img = self.transforms(img)
+
+        return (img, label)
+
+    def __len__(self):
+        return self.inputs.shape[0]
+
+
+
 if __name__ == '__main__':
 
     logging.info('Parameters (SF_CLIENT_LOG) ---------- [SERVER_PORT --> {}, DEVICE_TYPE --> {}, CLIENT_NO --> {}, CUT_LAYER --> {}, EPOCHS --> {}, SPLIT_PARTS --> {}, PART_NO --> {}, BATCH_SIZE --> {}, ROUNDS --> {}, FED_SERVER_PORT --> {}] ---------- '.format(
         sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8], sys.argv[9], sys.argv[10], sys.argv[12]))
-
+   
     # ***
 
     if(sys.argv[3] == 'cpu'):
@@ -71,19 +100,26 @@ if __name__ == '__main__':
     # Every image is labelled with one of the following class
     classes = ('plane', 'car', 'bird', 'cat',
                'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
-    trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
-                                            download=True, transform=transform)
-
     batch_size = int(sys.argv[9])
 
     ## Dataloader Splitting....
     if (sys.argv[7] == 'n'):
+        trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
+                                                download=True, transform=transform)
+
         trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
                                                   shuffle=True, num_workers=2)
         print('trainloader:' + str(len(trainloader)))
         datasetsize_used = len(trainset)
+    elif (sys.argv[7] == 's'):
+        with open('output.pickle', 'rb') as handle:
+            trainloaders = pickle.load(handle)
+            trainloader = trainloaders[atoi(sys.argv[4])]
+        datasetsize_used = len(trainloader.dataset)
 
     else:
+        trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
+                                                download=True, transform=transform)
         dataset_size = len(trainset)                         # 50k images
         total_indices = list(range(dataset_size))
         list_of_indices = np.array_split(
