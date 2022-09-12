@@ -1,7 +1,9 @@
 <<<<<<< HEAD
-*.pickle
+*.pickle*
 data/
 *.pt
+output.pickle*
+**/output.pickle*
 
 =======
 *.swp

@@ -14,7 +14,8 @@ from torch.autograd import Variable
 import time
 import zmq
 import torch
-from convert import array_to_bytes, bytes_to_array, ordered_dict_to_bytes, bytes_to_dict
+# from ..utils.convert import array_to_bytes, bytes_to_array, ordered_dict_to_bytes, bytes_to_dict
+import convert
 import sys
 from sys import getsizeof
 import numpy as np
@@ -104,10 +105,11 @@ if __name__ == '__main__':
         print('trainloader:' + str(len(trainloader)))
         datasetsize_used = len(trainset)
     elif (config["split_type"] == 's'):
-        if os.path.exists(output_file):
-            os.remove(output_file)
-        urllib.request.urlretrieve(config["data_server"]["server_address"]+"/"+output_file, output_file)
-        with open(output_file, 'rb') as handle:
+        if os.path.exists(output_file+str(client_id)):
+            os.remove(output_file+str(client_id))
+        print(config["data_server"]["server_address"]+"/"+output_file)
+        urllib.request.urlretrieve(config["data_server"]["server_address"]+"/"+output_file, output_file+str(client_id))
+        with open(output_file+str(client_id), 'rb') as handle:
             trainloaders = pickle.load(handle)
             trainloader = trainloaders[client_id]
         datasetsize_used = len(trainloader.dataset)
@@ -224,7 +226,7 @@ if __name__ == '__main__':
                 client_optimizer.zero_grad()
 
                 # print("LABELS", type(labels))
-                bytes_labels = array_to_bytes(labels.cpu())
+                bytes_labels = convert.array_to_bytes(labels.cpu())
                 socket.send(bytes_labels)
                 # print("labels_sent")
 
@@ -238,7 +240,7 @@ if __name__ == '__main__':
                 server_inputs = activations.detach().clone()
 
                 # print("inside for for...")
-                bytes_server_inputs = array_to_bytes(server_inputs.cpu())
+                bytes_server_inputs = convert.array_to_bytes(server_inputs.cpu())
                 server_work_time_start = time.time()
                 socket.send(bytes_server_inputs)
                 # print("data_sent")
@@ -258,7 +260,7 @@ if __name__ == '__main__':
 
                 recv_loss = socket.recv()
                 server_work_time_end = time.time()
-                numpy_loss = bytes_to_array(recv_loss)
+                numpy_loss = convert.bytes_to_array(recv_loss)
                 loss = torch.from_numpy(numpy_loss)
                 loss = loss.to(device)
                 # print("loss_recieved")
@@ -318,7 +320,7 @@ if __name__ == '__main__':
         weights = client_model.state_dict()
         # print(type(weights))
         print("SIze of model weights (before) in bytes is:-", getsizeof(weights))
-        bytes_weights = ordered_dict_to_bytes(weights)
+        bytes_weights = convert.ordered_dict_to_bytes(weights)
         print("SIze of model weights (after) in bytes is:-",
               getsizeof(bytes_weights))
         # time.sleep(10)
@@ -361,7 +363,7 @@ if __name__ == '__main__':
         global_weights = socket2.recv()
         print("Global weights recieved from fedServer")
         print("SIze of global model weights (before) in bytes is:-", getsizeof(global_weights))
-        global_numpy_weights = bytes_to_dict(global_weights)
+        global_numpy_weights = convert.bytes_to_dict(global_weights)
         print("SIze of global model weights (after) in bytes is:-", getsizeof(global_numpy_weights))
 
         socket2.close()

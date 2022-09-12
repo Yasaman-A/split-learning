@@ -1,22 +1,9 @@
-
 """
-arg1 --> SERVER_IP
-arg2 --> SERVER_PORT
-arg3 --> 'cpu' or 'gpu'
-arg4 --> client number/thread no
-arg5 --> cut_layer
-arg6 --> epoch
-arg7 --> split_parts, if on split type 'n' or '1'
-arg8 --> split_no, starts from 0
-arg9 --> batch_size
-arg10 --> round
-arg11 --> FED_SERVER_IP
-arg12 --> FED_SERVER_PORT
+arg1 --> CONFIG_FILE_PATH
+arg2 --> CLIENT_ID
 """
 
-# eg command: python client_splitnn.py localhost 5555 cpu 0 3 10 1 0 128
-# eg command: python client_splitnn.py localhost 5556 cpu 1 3 10
-
+from locale import atoi
 import torchvision
 import torchvision.transforms as transforms
 import torch.nn as nn
@@ -27,34 +14,72 @@ from torch.autograd import Variable
 import time
 import zmq
 import torch
-from convert import array_to_bytes, bytes_to_array, ordered_dict_to_bytes, bytes_to_dict
+# from convert import array_to_bytes, bytes_to_array, ordered_dict_to_bytes, bytes_to_dict
+import convert
+import os
+from torch.utils.data.dataset import Dataset
+import urllib.request
+import pickle
 import sys
 from sys import getsizeof
 import numpy as np
-
+import yaml
 import logging
 # from objsize import get_deep_size
 
-# Create and configure logger
-logging.basicConfig(filename="./client_thread_" + sys.argv[4] + "_" + sys.argv[2] + "_" + sys.argv[3] + "_" + sys.argv[5] + "_" + sys.argv[6] + "_" + sys.argv[7] + "_" + sys.argv[8] + "_" + sys.argv[9] + "_" + sys.argv[10] + "_" + sys.argv[12] + ".log",
-                    format='%(asctime)s %(message)s',
-                    filemode='a')
 
-# Creating an object
-logger = logging.getLogger()
+with open(sys.argv[1], "r") as yamlfile:
+    config = yaml.load(yamlfile, Loader=yaml.FullLoader)
+    print("Read successful")
 
-# Setting the threshold of logger to DEBUG
-logger.setLevel(logging.INFO)
+client_id = atoi(sys.argv[2])
+split_address = config["split_server"]["server_ip"]
+split_port = config["split_server"]["server_start_port"]+client_id-1
+fed_port = config["fed_server"]["server_start_port"]+client_id-1
+log_steps = config["log_steps"]
+num_epochs = int(config["epoch"])
+output_file = config["data_server"]["output_file"]
+rnd = config["round"]
+cut_layer = ["cut_layer"]
+
+
+if (config["logging"]):
+    # Create and configure logger
+    logging.basicConfig(filename= str(client_id) + "_" + str(config["cut_layer"]) + "_" + str(config["epoch"]) + "_" + str(config["rnd"]) + "_" + str(config["batch_size"])+ "_" + config["device"]+".log",
+                        format='%(asctime)s %(message)s',
+                        filemode='a')
+    # Creating an object
+    logger = logging.getLogger()
+    # Setting the threshold of logger to DEBUG
+    logger.setLevel(logging.INFO)
+
+class CustomImageDataset(Dataset):
+    '''
+    A custom Dataset class for images
+    inputs : numpy array [n_data x shape]
+    labels : numpy array [n_data (x 1)]
+    '''
+    def __init__(self, inputs, labels, transforms=None):
+        assert inputs.shape[0] == labels.shape[0]
+        self.inputs = torch.Tensor(inputs)
+        self.labels = torch.Tensor(labels).long()
+        self.transforms = transforms 
+
+    def __getitem__(self, index):
+        img, label = self.inputs[index], self.labels[index]
+
+        if self.transforms is not None:
+            img = self.transforms(img)
+
+        return (img, label)
+
+    def __len__(self):
+        return self.inputs.shape[0]
+
 
 
 if __name__ == '__main__':
-
-    logging.info('Parameters (SF_CLIENT_LOG) ---------- [SERVER_PORT --> {}, DEVICE_TYPE --> {}, CLIENT_NO --> {}, CUT_LAYER --> {}, EPOCHS --> {}, SPLIT_PARTS --> {}, PART_NO --> {}, BATCH_SIZE --> {}, ROUNDS --> {}, FED_SERVER_PORT --> {}] ---------- '.format(
-        sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8], sys.argv[9], sys.argv[10], sys.argv[12]))
-
-    # ***
-
-    if(sys.argv[3] == 'cpu'):
+    if(config["device"] == 'cpu'):
         device = 'cpu'
     else:
         device = torch.device(
@@ -72,22 +97,32 @@ if __name__ == '__main__':
     trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
                                             download=True, transform=transform)
 
-    batch_size = int(sys.argv[9])
+    batch_size = config["batch_size"]
 
     ## Dataloader Splitting....
-    if (sys.argv[7] == 'n'):
+    if (config["split_type"] == 'n'):
         trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
                                                   shuffle=True, num_workers=2)
         datasetsize_used = len(trainset)
+    elif (config["split_type"] == 's'):
+        if os.path.exists(output_file+str(client_id)):
+            os.remove(output_file+str(client_id))
+        # print(config["data_server"]["server_address"]+"/"+output_file)
+        urllib.request.urlretrieve(config["data_server"]["server_address"]+"/"+output_file, output_file+str(client_id))
+        with open(output_file+str(client_id), 'rb') as handle:
+            trainloaders = pickle.load(handle)
+            trainloader = trainloaders[client_id]
+        datasetsize_used = len(trainloader.dataset)
 
+    
     else:
         dataset_size = len(trainset)                         # 50k images
         total_indices = list(range(dataset_size))
         list_of_indices = np.array_split(
-            np.array(total_indices), int(sys.argv[7]))
+            np.array(total_indices), int(config["split_type"]))
         [l.tolist() for l in list_of_indices]
 
-        use_indices = list_of_indices[int(sys.argv[8])]
+        use_indices = list_of_indices[client_id]
         datasetsize_used = len(use_indices)
         # print(use_indices)
 
@@ -126,7 +161,7 @@ if __name__ == '__main__':
                 x = l(x)
             return x
 
-    config = {"cut_layer": int(sys.argv[5]), "logits": 10}
+    config = {"cut_layer": config["cut_layer"], "logits": 10}
     client_model = ResNet18Client(config).to(device)
 
     criterion = nn.CrossEntropyLoss()
@@ -135,18 +170,18 @@ if __name__ == '__main__':
 
 
 
-    num_rounds = int(sys.argv[10])
+    num_rounds = rnd
     for r in range(num_rounds):
 
         if r > 0:
             client_model.load_state_dict(global_numpy_weights)
-            print("GLOBAL_CLIENT_WEIGHTS_LOADED")
+            # print("GLOBAL_CLIENT_WEIGHTS_LOADED")
             del global_numpy_weights
 
 
 
         log_steps = 50
-        num_epochs = int(sys.argv[6])
+        # num_epochs = epochs
 
         training_start_time = time.time()
         for epoch in range(num_epochs):
@@ -155,14 +190,14 @@ if __name__ == '__main__':
             context = zmq.Context()
 
             #  Socket to talk to server
-            print("Connecting to hello world server…")
+            print("Connecting to server…")
             socket = context.socket(zmq.REQ)
-            url = "tcp://"+sys.argv[1] + ":"+sys.argv[2]
+            url = split_address + ":"+ str(split_port)
             socket.connect(url)
             # socket.connect("tcp://35.237.244.119:5555")
 
             iterations = len(trainloader)
-            print(iterations)
+            # print(iterations)
             send_iterations = str(iterations).encode()
             socket.send(send_iterations)
 
@@ -170,7 +205,7 @@ if __name__ == '__main__':
             recv_names = names.decode()
             # print(recv_names)
 
-            print(datasetsize_used)
+            # print(datasetsize_used)
             send_dataset_size = str(datasetsize_used).encode()
             socket.send(send_dataset_size)
 
@@ -185,15 +220,15 @@ if __name__ == '__main__':
             running_loss = 0.0
             for i, data in enumerate(trainloader, 0):
                 step_start_time = time.time()
-                print(r, epoch, i)
+                # print(r, epoch, i)
                 inputs, labels = data[0].to(device), data[1].to(device)
 
                 client_optimizer.zero_grad()
 
                 # print("LABELS", type(labels))
-                bytes_labels = array_to_bytes(labels.cpu())
+                bytes_labels = convert.array_to_bytes(labels.cpu())
                 socket.send(bytes_labels)
-                print("labels_sent")
+                # print("labels_sent")
 
                 ##dummy......
                 names = socket.recv()
@@ -205,10 +240,10 @@ if __name__ == '__main__':
                 server_inputs = activations.detach().clone()
 
                 # print("inside for for...")
-                bytes_server_inputs = array_to_bytes(server_inputs.cpu())
+                bytes_server_inputs = convert.array_to_bytes(server_inputs.cpu())
                 server_work_time_start = time.time()
                 socket.send(bytes_server_inputs)
-                print("data_sent")
+                # print("data_sent")
 
                 ###################################################################################################
 
@@ -225,10 +260,10 @@ if __name__ == '__main__':
 
                 recv_loss = socket.recv()
                 server_work_time_end = time.time()
-                numpy_loss = bytes_to_array(recv_loss)
+                numpy_loss = convert.bytes_to_array(recv_loss)
                 loss = torch.from_numpy(numpy_loss)
                 loss = loss.to(device)
-                print("loss_recieved")
+                # print("loss_recieved")
 
                 # Simulation of Client Happening in this portion
                 # Client optimization
@@ -272,15 +307,15 @@ if __name__ == '__main__':
         #  Socket to talk to server
         print("Connecting to fed_avg server to give weights…")
         socket1 = context1.socket(zmq.REQ)
-        url = "tcp://"+sys.argv[11] + ":"+sys.argv[12]
+        url = config["fed_server"]["server_ip"] + ":"+ fed_port
         socket1.connect(url)
         # socket.connect("tcp://35.237.244.119:5555")
 
         weights = client_model.state_dict()
         # print(type(weights))
-        print("SIze of model weights (before) in bytes is:-", getsizeof(weights))
-        bytes_weights = ordered_dict_to_bytes(weights)
-        print("SIze of model weights (after) in bytes is:-",
+        print("Size of model weights (before) in bytes is:-", getsizeof(weights))
+        bytes_weights = convert.ordered_dict_to_bytes(weights)
+        print("Size of model weights (after) in bytes is:-",
               getsizeof(bytes_weights))
         # time.sleep(10)
         socket1.send(bytes_weights)
@@ -320,10 +355,10 @@ if __name__ == '__main__':
         socket2.send(send_msg)
 
         global_weights = socket2.recv()
-        print("Global weights recieved from fedServer")
-        print("SIze of global model weights (before) in bytes is:-", getsizeof(global_weights))
-        global_numpy_weights = bytes_to_dict(global_weights)
-        print("SIze of global model weights (after) in bytes is:-", getsizeof(global_numpy_weights))
+        # print("Global weights recieved from fedServer")
+        print("Size of global model weights (before) in bytes is:-", getsizeof(global_weights))
+        global_numpy_weights = convert.bytes_to_dict(global_weights)
+        print("Size of global model weights (after) in bytes is:-", getsizeof(global_numpy_weights))
 
         socket2.close()
         context2.term()

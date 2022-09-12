@@ -1,11 +1,6 @@
 
 """
-arg1 --> total number of clients
-arg2 --> STARTING_PORT_NO
-arg3 --> 'cpu' or 'gpu'
-arg4 --> cut_layer
-arg5 --> epochs
-arg6 --> round
+arg1 --> CONFIG_FILE_PATH
 """
 
 # eg command: python server_splitnn_th_REPREQ.py 2 5555 cpu
@@ -22,26 +17,42 @@ from torch.autograd import Variable
 import time
 import zmq
 import torch
-from convert import array_to_bytes, bytes_to_array
+import convert
 import sys
 import random
-
+import yaml
 import logging
 # from objsize import get_deep_size
 
-# Create and configure logger
-logging.basicConfig(filename="./sf_server_" + sys.argv[1] + "_" + sys.argv[2] + "_" + sys.argv[3] + "_" + sys.argv[4] + "_" + sys.argv[5] + "_" + sys.argv[6] + ".log",
-                    format='%(asctime)s %(message)s',
-                    filemode='a')
 
-# Creating an object
-logger = logging.getLogger()
-
-# Setting the threshold of logger to DEBUG
-logger.setLevel(logging.INFO)
+with open(sys.argv[1], "r") as yamlfile:
+    config = yaml.load(yamlfile, Loader=yaml.FullLoader)
+    print("Read successful")
 
 
-logging.info('Parameters (SF_SERVER_LOG) ---------- [TOTAL_CLIENTS --> {}, STARTING_SERVER_PORT --> {}, DEVICE_TYPE --> {}, CUT_LAYER --> {}, EPOCHS --> {}, ROUNDS --> {}] ---------- '.format(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6]))
+client_total = config["client_total"]
+split_port = config["split_server"]["server_start_port"]
+device = config["device"]
+cut_layer = config["cut_layer"]
+epochs = config["epoch"]
+device = ["config"]
+rnd = config["round"]
+
+if(device != 'cpu'):
+        device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+
+
+if (config["logging"]):
+    # Create and configure logger
+    logging.basicConfig(filename="./sf_server_" + str(client_total) + "_" + str(split_port) + "_" + device + "_" + cut_layer + "_" + epochs + "_" + rnd + ".log",
+                        format='%(asctime)s %(message)s',
+                        filemode='a')
+    # Creating an object
+    logger = logging.getLogger()
+    # Setting the threshold of logger to DEBUG
+    logger.setLevel(logging.INFO)
+    logging.info('Parameters (SF_SERVER_LOG) ---------- [TOTAL_CLIENTS --> {}, STARTING_SERVER_PORT --> {}, DEVICE_TYPE --> {}, CUT_LAYER --> {}, EPOCHS --> {}, ROUNDS --> {}] ---------- '.format(str(client_total), str(split_port), device, str(cut_layer), str(epochs), str(rnd)))
+
 
 
 def average_weights(w, datasize):
@@ -163,15 +174,6 @@ def average_weights(w, datasize):
 def main():
     """ server routine """
 
-
-
-    if(sys.argv[3] == 'cpu'):
-        device = 'cpu'
-    else:
-        device = torch.device(
-            'cuda') if torch.cuda.is_available() else torch.device('cpu')
-    print(device)
-
     class ResNet18Server(nn.Module):
         """docstring for ResNet"""
 
@@ -197,7 +199,7 @@ def main():
                 x = l(x)
             return nn.functional.softmax(x, dim=1)
 
-    config = {"cut_layer": int(sys.argv[4]), "logits": 10}
+    config = {"cut_layer": cut_layer, "logits": 10}
     # client_model = ResNet18Client(config).to(device)
     server_model = ResNet18Server(config).to(device)
 
@@ -208,13 +210,13 @@ def main():
 
 
 
-    total_clients = int(sys.argv[1])
-    port_no = int(sys.argv[2])
-    connection_url = ["tcp://*:" +str(port_no+i) for i in range(total_clients)]
+    # total_clients = client_total
+    port_no = split_port
+    connection_url = ["tcp://*:" +str(port_no+i) for i in range(client_total)]
     # connection_url = ["tcp://*:5555", "tcp://*:5556"]
 
-    num_rounds = int(sys.argv[6])
-    num_epochs = int(sys.argv[5])
+    num_rounds =rnd
+    num_epochs = epochs
 
     context = zmq.Context()
 
@@ -225,9 +227,9 @@ def main():
         for epoch in range(num_epochs):
 
             random.shuffle(connection_url)
-            print("NEW_SHUFFLED_CLIENTS_FOR_THIS_EPOCH --> {}".format(connection_url))
-            logging.info("NEW_SHUFFLED_CLIENTS_FOR_THIS_EPOCH --> {}".format(connection_url))
-            for cl in range(total_clients):
+            # print("NEW_SHUFFLED_CLIENTS_FOR_THIS_EPOCH --> {}".format(connection_url))
+            # logging.info("NEW_SHUFFLED_CLIENTS_FOR_THIS_EPOCH --> {}".format(connection_url))
+            for cl in range(client_total):
                 client_no = cl
                 # worker_routine(connection_url[cl], context, cl, r)
 
@@ -270,20 +272,20 @@ def main():
                     server_optimizer.zero_grad()
 
                     recv_labels = socket.recv()
-                    numpy_labels = bytes_to_array(recv_labels)
+                    numpy_labels = convert.bytes_to_array(recv_labels)
                     labels = torch.from_numpy(numpy_labels)
                     labels = labels.to(device)
-                    print("labels_recieved")
+                    # print("labels_recieved")
 
                     ##dummy......
                     socket.send(send_msg)
 
                     # print("inside for for")
                     recv_serv_inputs = socket.recv()
-                    numpy_server_inputs = bytes_to_array(recv_serv_inputs)
+                    numpy_server_inputs = convert.bytes_to_array(recv_serv_inputs)
                     server_inputs = torch.from_numpy(numpy_server_inputs)
                     server_inputs = server_inputs.to(device)
-                    print("data_recieved")
+                    # print("data_recieved")
 
                     ###################################################################################################
 
@@ -298,9 +300,9 @@ def main():
                     server_optimizer.step()
 
                     transfer_loss = loss.detach().clone()
-                    bytes_loss = array_to_bytes(transfer_loss.cpu())
+                    bytes_loss = convert.array_to_bytes(transfer_loss.cpu())
                     socket.send(bytes_loss)
-                    print("loss_sent")
+                    # print("loss_sent")
 
                     step_end_time = time.time()
                     total_one_step_time = step_end_time - step_start_time
@@ -332,7 +334,7 @@ def main():
 
             print("All clients served..")
 
-        model_save_name = "./server_model_r" + str(r+1) + "_" + sys.argv[1] + "_" + sys.argv[2] + "_" + sys.argv[3] + sys.argv[4] + "_" + sys.argv[5] + "_" + sys.argv[6] + ".pt"
+        model_save_name = "./server_fedAvg_model_r" + str(r) + "_" + str(client_total) + "_" + str(split_port)  + "_" + device + "_" + str(cut_layer) + "_" + str(epochs) + "_" + str(rnd) + ".pt"
         torch.save(server_model.state_dict(), model_save_name)
         print("MODEL_SAVED.")
 

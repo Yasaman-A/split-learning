@@ -19,7 +19,8 @@ from torch.autograd import Variable
 import time
 import zmq
 import torch
-from convert import array_to_bytes, bytes_to_array, ordered_dict_to_bytes, bytes_to_dict
+# from .utils import ordered_dict_to_bytes, bytes_to_dict
+import convert
 import sys
 from sys import getsizeof
 import yaml
@@ -87,7 +88,7 @@ def get_weights(url, context, thread_no):
     print("Waiting for weights from client {}".format(thread_no))
     weights = socket.recv()
     print("Weights recieved from client {}".format(thread_no))
-    numpy_weights = bytes_to_dict(weights)
+    numpy_weights = convert.bytes_to_dict(weights)
     client_weights.append(numpy_weights)
 
     msg = "weights_recv"
@@ -130,7 +131,7 @@ def send_weights(url, context, thread_no):
     recv_names = names.decode()
 
     print("Size of global model weights (before) in bytes is:-", getsizeof(client_global_weights))
-    global_bytes_weights = ordered_dict_to_bytes(client_global_weights)
+    global_bytes_weights = convert.ordered_dict_to_bytes(client_global_weights)
     print("Size of global model weights (after) in bytes is:-",
           getsizeof(global_bytes_weights))
     # time.sleep(10)

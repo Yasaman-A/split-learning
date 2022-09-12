@@ -17,7 +17,8 @@ import sys
 import yaml
 import logging
 import os
-from convert import array_to_bytes, bytes_to_array, ordered_dict_to_bytes, bytes_to_dict
+# from ..utils.convert import array_to_bytes, bytes_to_array
+import convert
 
 # from pathlib import Path
 # from objsize import get_deep_size
@@ -169,7 +170,7 @@ def worker_routine(url, context, thread_no, r):
             server_optimizer.zero_grad()
 
             recv_labels = socket.recv()
-            numpy_labels = bytes_to_array(recv_labels)
+            numpy_labels = convert.bytes_to_array(recv_labels)
             labels = torch.from_numpy(numpy_labels)
             labels = labels.to(config["device"])
             # print("labels_recieved")
@@ -179,7 +180,7 @@ def worker_routine(url, context, thread_no, r):
 
             # print("inside for for")
             recv_serv_inputs = socket.recv()
-            numpy_server_inputs = bytes_to_array(recv_serv_inputs)
+            numpy_server_inputs = convert.bytes_to_array(recv_serv_inputs)
             server_inputs = torch.from_numpy(numpy_server_inputs)
             server_inputs = server_inputs.to(config["device"])
             # print("data_recieved")
@@ -198,7 +199,7 @@ def worker_routine(url, context, thread_no, r):
 
             transfer_loss = loss.detach().clone()
             # bytes_loss = array_to_bytes(transfer_loss.cpu())
-            bytes_loss = bytearray(transfer_loss.cpu())
+            bytes_loss = convert.array_to_bytes(transfer_loss.cpu())
             
             socket.send(bytes_loss)
             # print("loss_sent")

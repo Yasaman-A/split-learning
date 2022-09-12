@@ -1,12 +1,9 @@
-
 #######################################################
 #################     FED_SERVER    ###################
 #######################################################
 
 """
-arg1 --> total number of clients
-arg2 --> STARTING_PORT_NO
-arg3 --> round
+arg1 --> CONFIG_FILE_PATH
 """
 
 # eg command: python fedServer.py 2 4444
@@ -23,27 +20,35 @@ from torch.autograd import Variable
 import time
 import zmq
 import torch
-from convert import array_to_bytes, bytes_to_array, ordered_dict_to_bytes, bytes_to_dict
+import convert
 import sys
 from sys import getsizeof
-
+import yaml
 import logging
 # from objsize import get_deep_size
 
-# Create and configure logger
-logging.basicConfig(filename="./fed_server_" + sys.argv[1] + "_" + sys.argv[2] + "_" + sys.argv[3] + ".log",
-                    format='%(asctime)s %(message)s',
-                    filemode='a')
 
-# Creating an object
-logger = logging.getLogger()
+with open(sys.argv[1], "r") as yamlfile:
+    config = yaml.load(yamlfile, Loader=yaml.FullLoader)
+    print("Read successful")
 
-# Setting the threshold of logger to DEBUG
-logger.setLevel(logging.INFO)
+client_total = config["client_total"]
+fed_port = config["fed_server"]["server_start_port"]
+rnd = config["round"]
 
 
-logging.info('Parameters (FED_SERVER_LOG) ---------- [TOTAL_CLIENTS --> {}, STARTING_SERVER_PORT --> {}, ROUNDS --> {}] ---------- '.format(
-    sys.argv[1], sys.argv[2], sys.argv[3]))
+if (config["logging"]):
+    # Create and configure logger
+    logging.basicConfig(filename="./fed_server_" + str(client_total) + "_" + str(fed_port) + "_" + str(rnd) + ".log",
+                        format='%(asctime)s %(message)s',
+                        filemode='a')
+    # Creating an object
+    logger = logging.getLogger()
+    # Setting the threshold of logger to DEBUG
+    logger.setLevel(logging.INFO)
+    logging.info('Parameters (FED_SERVER_LOG) ---------- [TOTAL_CLIENTS --> {}, STARTING_SERVER_PORT --> {}, ROUNDS --> {}] ---------- '.format(
+        str(client_total), str(fed_port), str(rnd)))
+
 
 
 def average_weights(w, datasize):
@@ -85,7 +90,7 @@ def get_weights(url, context, thread_no):
     print("Waiting for weights from client {}".format(thread_no))
     weights = socket.recv()
     print("Weights recieved from client {}".format(thread_no))
-    numpy_weights = bytes_to_dict(weights)
+    numpy_weights = convert.bytes_to_dict(weights)
     client_weights.append(numpy_weights)
 
     msg = "weights_recv"
@@ -128,7 +133,7 @@ def send_weights(url, context, thread_no):
     recv_names = names.decode()
 
     print("SIze of global model weights (before) in bytes is:-", getsizeof(client_global_weights))
-    global_bytes_weights = ordered_dict_to_bytes(client_global_weights)
+    global_bytes_weights = convert.ordered_dict_to_bytes(client_global_weights)
     print("SIze of global model weights (after) in bytes is:-",
           getsizeof(global_bytes_weights))
     # time.sleep(10)
@@ -152,12 +157,12 @@ def main():
     client_weights = []
     datasetsize_client = []
 
-    total_threads = int(sys.argv[1])
-    port_no = int(sys.argv[2])
-    connection_url = ["tcp://*:" + str(port_no+i) for i in range(total_threads)]
+    total_threads = client_total
+    port_no = fed_port
+    connection_url = ["tcp://*:" + str(port_no+i) for i in range(client_total)]
     # connection_url = ["tcp://*:5555", "tcp://*:5556"]
 
-    num_rounds = int(sys.argv[3])
+    num_rounds = rnd
     context = zmq.Context()
 
     for r in range(num_rounds):
@@ -179,7 +184,7 @@ def main():
         client_global_weights = average_weights(client_weights, datasetsize_client)
         print("Global clients calculated..")
         
-        model_save_name = "./client_fedAvg_model_r" + str(r+1) + "_" + sys.argv[1] + "_" + sys.argv[2] + "_" + sys.argv[3] + ".pt"
+        model_save_name = "./client_fedAvg_model_r" + str(r) + "_" + str(client_total) + "_" + str(fed_port) + "_" + str(rnd) + ".pt"
         torch.save(client_global_weights, model_save_name)
         print("MODEL_SAVED.")
 
