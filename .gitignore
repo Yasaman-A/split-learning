@@ -1,7 +1,7 @@
 <<<<<<< HEAD
 *.pickle
 data/
-
+*.pt
 
 =======
 *.swp
