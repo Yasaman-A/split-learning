@@ -1,23 +1,7 @@
-
 """
-arg1 --> SERVER_IP
-arg2 --> SERVER_PORT
-arg3 --> 'cpu' or 'gpu'
-arg4 --> client number/thread no
-arg5 --> cut_layer
-arg6 --> epoch
-arg7 --> split_parts, if on split type 'n', 's', or a number
-arg8 --> split_no, starts from 0
-arg9 --> batch_size
-arg10 --> round
-arg11 --> FED_SERVER_IP
-arg12 --> FED_SERVER_PORT
-arg13 --> DATA_SERVER_ADDRESS
+arg1 --> CONFIG_FILE_PATH
+arg2 --> CLIENT_ID
 """
-
-
-# eg command: python client_splitnn.py localhost 5555 cpu 0 3 10 1 0 128
-# eg command: python client_splitnn.py localhost 5556 cpu 1 3 10
 
 from locale import atoi
 import torchvision
@@ -42,26 +26,30 @@ import yaml
 import logging
 # from objsize import get_deep_size
 
+
 with open(sys.argv[1], "r") as yamlfile:
-    data = yaml.load(yamlfile, Loader=yaml.FullLoader)
+    config = yaml.load(yamlfile, Loader=yaml.FullLoader)
     print("Read successful")
-# print(data)
-print(data["fed"])
-print(data["fed"]["ip"])
-sys.exit(0)
+
+client_id = atoi(sys.argv[2])
+split_address = config["split_server"]["server_ip"]
+split_port = config["split_server"]["server_start_port"]+client_id-1
+fed_port = config["fed_server"]["server_start_port"]+client_id-1
+log_steps = config["log_steps"]
+num_epochs = int(config["epoch"])
+output_file = config["data_server"]["output_file"]
+rnd = config["round"]
 
 
-
-# Create and configure logger
-logging.basicConfig(filename="./client_thread_" + sys.argv[4] + "_" + sys.argv[2] + "_" + sys.argv[3] + "_" + sys.argv[5] + "_" + sys.argv[6] + "_" + sys.argv[7] + "_" + sys.argv[8] + "_" + sys.argv[9] + "_" + sys.argv[10] + "_" + sys.argv[12] + ".log",
-                    format='%(asctime)s %(message)s',
-                    filemode='a')
-
-# Creating an object
-logger = logging.getLogger()
-
-# Setting the threshold of logger to DEBUG
-logger.setLevel(logging.INFO)
+if (config["logging"]):
+    # Create and configure logger
+    logging.basicConfig(filename= str(client_id) + "_" + str(config["cut_layer"]) + "_" + str(config["epoch"]) + "_" + str(config["rnd"]) + "_" + str(config["batch_size"])+ "_" + config["device"]+".log",
+                        format='%(asctime)s %(message)s',
+                        filemode='a')
+    # Creating an object
+    logger = logging.getLogger()
+    # Setting the threshold of logger to DEBUG
+    logger.setLevel(logging.INFO)
 
 
 class CustomImageDataset(Dataset):
@@ -88,24 +76,12 @@ class CustomImageDataset(Dataset):
         return self.inputs.shape[0]
 
 
-
 if __name__ == '__main__':
-    with open(sys.argv[1], "r") as yamlfile:
-        data = yaml.load(yamlfile, Loader=yaml.FullLoader)
-        print("Read successful")
-    print(data)
-    sys.exit(0)
 
-    logging.info('Parameters (SF_CLIENT_LOG) ---------- [SERVER_PORT --> {}, DEVICE_TYPE --> {}, CLIENT_NO --> {}, CUT_LAYER --> {}, EPOCHS --> {}, SPLIT_PARTS --> {}, PART_NO --> {}, BATCH_SIZE --> {}, ROUNDS --> {}, FED_SERVER_PORT --> {}] ---------- '.format(
-        sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8], sys.argv[9], sys.argv[10], sys.argv[12]))
-   
-    # ***
-
-    if(sys.argv[3] == 'cpu'):
+    if(config["device"] == 'cpu'):
         device = 'cpu'
     else:
-        device = torch.device(
-            'cuda') if torch.cuda.is_available() else torch.device('cpu')
+        device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     print(device)
 
     transform = transforms.Compose(
@@ -116,10 +92,10 @@ if __name__ == '__main__':
     # Every image is labelled with one of the following class
     classes = ('plane', 'car', 'bird', 'cat',
                'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
-    batch_size = int(sys.argv[9])
+    batch_size = config["batch_size"]
 
     ## Dataloader Splitting....
-    if (sys.argv[7] == 'n'):
+    if (config["split_type"] == 'n'):
         trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
                                                 download=True, transform=transform)
 
@@ -127,13 +103,13 @@ if __name__ == '__main__':
                                                   shuffle=True, num_workers=2)
         print('trainloader:' + str(len(trainloader)))
         datasetsize_used = len(trainset)
-    elif (sys.argv[7] == 's'):
-        if os.path.exists("output.pickle"):
-            os.remove("output.pickle")
-        urllib.request.urlretrieve(sys.argv[13]+"/output.pickle", "output.pickle")
-        with open('output.pickle', 'rb') as handle:
+    elif (config["split_type"] == 's'):
+        if os.path.exists(output_file):
+            os.remove(output_file)
+        urllib.request.urlretrieve(config["data_server"]["server_address"]+"/"+output_file, output_file)
+        with open(output_file, 'rb') as handle:
             trainloaders = pickle.load(handle)
-            trainloader = trainloaders[atoi(sys.argv[4])]
+            trainloader = trainloaders[client_id]
         datasetsize_used = len(trainloader.dataset)
 
     else:
@@ -142,10 +118,10 @@ if __name__ == '__main__':
         dataset_size = len(trainset)                         # 50k images
         total_indices = list(range(dataset_size))
         list_of_indices = np.array_split(
-            np.array(total_indices), int(sys.argv[7]))
+            np.array(total_indices), int(config["split_type"]))
         [l.tolist() for l in list_of_indices]
 
-        use_indices = list_of_indices[int(sys.argv[8])]
+        use_indices = list_of_indices[client_id]
         datasetsize_used = len(use_indices)
         print('use_indices:' + str(use_indices))
 
@@ -183,7 +159,7 @@ if __name__ == '__main__':
                 x = l(x)
             return x
 
-    config = {"cut_layer": int(sys.argv[5]), "logits": 10}
+    config = {"cut_layer": int(config["cut_layer"]), "logits": 10}
     client_model = ResNet18Client(config).to(device)
 
     criterion = nn.CrossEntropyLoss()
@@ -192,9 +168,9 @@ if __name__ == '__main__':
 
 
     training_start_time = time.time()
-    num_rounds = int(sys.argv[10])
+    num_rounds = rnd
+    
     for r in range(num_rounds):
-
         if r > 0:
             client_model.load_state_dict(global_numpy_weights)
             print("GLOBAL_CLIENT_WEIGHTS_LOADED")
@@ -205,9 +181,10 @@ if __name__ == '__main__':
         context = zmq.Context()
 
         #  Socket to talk to server
-        print("Connecting to hello world server…")
+        print("Connecting to split server…")
         socket = context.socket(zmq.REQ)
-        url = "tcp://"+sys.argv[1] + ":"+sys.argv[2]
+        
+        url = split_address + ":"+ str(split_port)
         socket.connect(url)
         # socket.connect("tcp://35.237.244.119:5555")
         
@@ -232,8 +209,8 @@ if __name__ == '__main__':
         # socket.send(send_iterations)
         # exit()
 
-        log_steps = 50
-        num_epochs = int(sys.argv[6])
+        # log_steps = config[log_steps]
+        
 
 
         for epoch in range(num_epochs):
@@ -319,9 +296,9 @@ if __name__ == '__main__':
         socket.close()
         context.term()
 
-        model_save_name = "./client_thread_model_r" + str(r) + "_" + sys.argv[4] + "_" +sys.argv[2] + "_" + sys.argv[3] + "_" + sys.argv[5] + "_" + sys.argv[6] + "_" + sys.argv[7] + "_" + sys.argv[8] + "_" + sys.argv[9] + "_" + sys.argv[10] + "_" + sys.argv[12] + ".pt"
+        model_save_name = "./client_thread_model_r" + str(r) + "_" + str(client_id) + "_" + split_port + "_" + config["device"] + "_" + config["cut_layer"] + "_" + config["epoch"] + "_" + config["split_type"] + "_" + str(client_id) + "_" + config["batch_size"] + "_" + config["round"] + "_" + fed_port + ".pt"
         torch.save(client_model.state_dict(), model_save_name)
-        print("***TH - {}***  MODEL_SAVED." .format(sys.argv[4]))
+        print("***TH - {}***  MODEL_SAVED." .format(client_id))
 
 
 
@@ -332,9 +309,9 @@ if __name__ == '__main__':
         context1 = zmq.Context()
 
         #  Socket to talk to server
-        print("Connecting to fed_avg server to give weights…")
+        print("Connecting to fed_avg server to aggregate weights …")
         socket1 = context1.socket(zmq.REQ)
-        url = "tcp://"+sys.argv[11] + ":"+sys.argv[12]
+        url = config["fed_server"]["server_ip"] + ":"+ fed_port
         socket1.connect(url)
         # socket.connect("tcp://35.237.244.119:5555")
 
@@ -373,7 +350,7 @@ if __name__ == '__main__':
         #  Socket to talk to server
         print("Connecting to fed_avg server to recv global weights…")
         socket2 = context2.socket(zmq.REQ)
-        url = "tcp://"+sys.argv[11] + ":"+sys.argv[12]
+        url = config["split_server"]["server_ip"] + ":"+ fed_port
         socket2.connect(url)
         # socket.connect("tcp://35.237.244.119:5555")
 

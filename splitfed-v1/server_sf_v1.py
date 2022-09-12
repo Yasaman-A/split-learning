@@ -1,15 +1,6 @@
-
 """
-arg1 --> total number of clients
-arg2 --> STARTING_PORT_NO
-arg3 --> 'cpu' or 'gpu'
-arg4 --> cut_layer
-arg5 --> epochs
-arg6 --> round
+arg1 --> CONFIG_FILE_PATH
 """
-
-# eg command: python server_splitnn_th_REPREQ.py 2 5555 cpu
-
 import copy
 import threading
 import torchvision
@@ -22,25 +13,40 @@ from torch.autograd import Variable
 import time
 import zmq
 import torch
-from convert import array_to_bytes, bytes_to_array
 import sys
-
+import yaml
 import logging
+import os
+from convert import array_to_bytes, bytes_to_array, ordered_dict_to_bytes, bytes_to_dict
+
+# from pathlib import Path
 # from objsize import get_deep_size
 
-# Create and configure logger
-logging.basicConfig(filename="./sf_server_" + sys.argv[1] + "_" + sys.argv[2] + "_" + sys.argv[3] + "_" + sys.argv[4] + "_" + sys.argv[5] + "_" + sys.argv[6] + ".log",
-                    format='%(asctime)s %(message)s',
-                    filemode='a')
-
-# Creating an object
-logger = logging.getLogger()
-
-# Setting the threshold of logger to DEBUG
-logger.setLevel(logging.INFO)
 
 
-logging.info('Parameters (SF_SERVER_LOG) ---------- [TOTAL_CLIENTS --> {}, STARTING_SERVER_PORT --> {}, DEVICE_TYPE --> {}, CUT_LAYER --> {}, EPOCHS --> {}, ROUNDS --> {}] ---------- '.format(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6]))
+with open(sys.argv[1], "r") as yamlfile:
+    config = yaml.load(yamlfile, Loader=yaml.FullLoader)
+    print("Read successful")
+
+
+client_total = config["client_total"]
+split_port = config["split_server"]["server_start_port"]
+device = config["device"]
+cut_layer = config["cut_layer"]
+epochs = config["epoch"]
+rnd = config["round"]
+
+
+if (config["logging"]):
+    # Create and configure logger
+    logging.basicConfig(filename="./sf_server_" + str(client_total) + "_" + str(split_port) + "_" + device + "_" + cut_layer + "_" + epochs + "_" + rnd + ".log",
+                        format='%(asctime)s %(message)s',
+                        filemode='a')
+    # Creating an object
+    logger = logging.getLogger()
+    # Setting the threshold of logger to DEBUG
+    logger.setLevel(logging.INFO)
+    logging.info('Parameters (SF_SERVER_LOG) ---------- [TOTAL_CLIENTS --> {}, STARTING_SERVER_PORT --> {}, DEVICE_TYPE --> {}, CUT_LAYER --> {}, EPOCHS --> {}, ROUNDS --> {}] ---------- '.format(str(client_total), str(split_port), device, str(cut_layer), str(epochs), str(rnd)))
 
 
 def average_weights(w, datasize):
@@ -58,14 +64,12 @@ def average_weights(w, datasize):
         for i in range(1, len(w)):
             w_avg[key] += w[i][key]
         w_avg[key] = torch.div(w_avg[key], float(sum(datasize)))
-
     return w_avg
 
 
 
 def worker_routine(url, context, thread_no, r):
     """ Worker routine """
-
     global server_global_weights
     global server_weights
     global datasetsize_server
@@ -77,11 +81,9 @@ def worker_routine(url, context, thread_no, r):
     # socket.connect(worker_url)
     # socket.connect("tcp://*:5555")
     socket.bind(url)
-
     ##*****************************************************************************************************************
     ##*****************************************************************************************************************
     ##*****************************************************************************************************************
-
     ##################################################################################################################
 
     # from mpi4py import MPI
@@ -96,11 +98,8 @@ def worker_routine(url, context, thread_no, r):
     # # logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
     # logging.info('Code started..')
 
-    if(sys.argv[3] == 'cpu'):
-        device = 'cpu'
-    else:
+    if(config["device"] != 'cpu'):
         device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-    print(device)
 
     class ResNet18Server(nn.Module):
         """docstring for ResNet"""
@@ -127,9 +126,9 @@ def worker_routine(url, context, thread_no, r):
                 x = l(x)
             return nn.functional.softmax(x, dim=1)
 
-    config = {"cut_layer": int(sys.argv[4]), "logits": 10}
+    model_config = {"cut_layer": cut_layer, "logits": 10}
     # client_model = ResNet18Client(config).to(device)
-    server_model = ResNet18Server(config).to(device)
+    server_model = ResNet18Server(model_config).to(config["device"])
 
     criterion = nn.CrossEntropyLoss()
     # client_optimizer = optim.SGD(client_model.parameters(), lr=0.01, momentum=0.9)
@@ -156,7 +155,7 @@ def worker_routine(url, context, thread_no, r):
     send_msg = msg.encode()
     socket.send(send_msg)
 
-    num_epochs = int(sys.argv[5])
+    num_epochs = epochs
 
     round_start_time = time.time()
     for epoch in range(num_epochs):
@@ -172,7 +171,7 @@ def worker_routine(url, context, thread_no, r):
             recv_labels = socket.recv()
             numpy_labels = bytes_to_array(recv_labels)
             labels = torch.from_numpy(numpy_labels)
-            labels = labels.to(device)
+            labels = labels.to(config["device"])
             # print("labels_recieved")
 
             ##dummy......
@@ -182,7 +181,7 @@ def worker_routine(url, context, thread_no, r):
             recv_serv_inputs = socket.recv()
             numpy_server_inputs = bytes_to_array(recv_serv_inputs)
             server_inputs = torch.from_numpy(numpy_server_inputs)
-            server_inputs = server_inputs.to(device)
+            server_inputs = server_inputs.to(config["device"])
             # print("data_recieved")
 
             ###################################################################################################
@@ -198,7 +197,9 @@ def worker_routine(url, context, thread_no, r):
             server_optimizer.step()
 
             transfer_loss = loss.detach().clone()
-            bytes_loss = array_to_bytes(transfer_loss.cpu())
+            # bytes_loss = array_to_bytes(transfer_loss.cpu())
+            bytes_loss = bytearray(transfer_loss.cpu())
+            
             socket.send(bytes_loss)
             # print("loss_sent")
 
@@ -225,11 +226,10 @@ def worker_routine(url, context, thread_no, r):
     server_weights.append(server_model.state_dict())
     datasetsize_server.append(dataset_size)
 
-    model_save_name = "./server_thread_model_r" + str(r) + "_" + str(thread_no) + "_" +sys.argv[1] + "_" + sys.argv[2] + "_" + sys.argv[3] + "_" + sys.argv[4] + "_" + sys.argv[5] + ".pt"
+    model_save_name = "./server_thread_model_r" + str(r) + "_" + str(thread_no) + "_" +str(client_total) + "_" + str(split_port)  + "_" + device + "_" + str(cut_layer) + "_" + str(epochs) + ".pt"
+
     torch.save(server_model.state_dict(), model_save_name)
     print("***TH - {}***  MODEL_SAVED." .format(thread_no))
-
-
 
     ##*****************************************************************************************************************
     ##*****************************************************************************************************************
@@ -250,12 +250,12 @@ def main():
     server_weights = []
     datasetsize_server = []
 
-    total_threads = int(sys.argv[1])
-    port_no = int(sys.argv[2])
+    total_threads = client_total
+    port_no = split_port
     connection_url = ["tcp://*:" +str(port_no+i) for i in range(total_threads)]
     # connection_url = ["tcp://*:5555", "tcp://*:5556"]
 
-    num_rounds = int(sys.argv[6])
+    num_rounds = rnd
     context = zmq.Context()
 
     training_start_time = time.time()
@@ -282,7 +282,7 @@ def main():
         # Server models weighted averaging..
         server_global_weights = average_weights(server_weights, datasetsize_server)
 
-        model_save_name = "./server_fedAvg_model_r" + str(r) + "_" + sys.argv[1] + "_" + sys.argv[2] + "_" + sys.argv[3] + sys.argv[4] + "_" + sys.argv[5] + "_" + sys.argv[6] + ".pt"
+        model_save_name = "./server_fedAvg_model_r" + str(r) + "_" + str(client_total) + "_" + str(split_port)  + "_" + device + "_" + str(cut_layer) + "_" + str(epochs) + "_" + str(rnd) + ".pt"
         torch.save(server_global_weights, model_save_name)
         print("MODEL_SAVED.")
 
