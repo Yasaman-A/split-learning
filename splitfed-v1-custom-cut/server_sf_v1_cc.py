@@ -1,3 +1,7 @@
+"""
+arg1 --> CONFIG_FILE_PATH
+arg2..x --> cut layers for all clients
+"""
 
 """
 arg1 --> total number of clients
@@ -23,26 +27,43 @@ from torch.autograd import Variable
 import time
 import zmq
 import torch
-from convert import array_to_bytes, bytes_to_array
+import convert
 import sys
 from custom_model_avg import server_custom_avg_model
-
+import yaml
 import logging
 # from objsize import get_deep_size
 
-# Create and configure logger
-logging.basicConfig(filename="./cc_sf_server_" + sys.argv[1] + "_" + sys.argv[2] + "_" + sys.argv[3] + "_" + sys.argv[4] + "_" + sys.argv[5] + "_" + sys.argv[6] + ".log",
-                    format='%(asctime)s %(message)s',
-                    filemode='a')
-
-# Creating an object
-logger = logging.getLogger()
-
-# Setting the threshold of logger to DEBUG
-logger.setLevel(logging.INFO)
 
 
-logging.info('Parameters (CC_SF_SERVER_LOG) ---------- [TOTAL_CLIENTS --> {}, STARTING_SERVER_PORT --> {}, DEVICE_TYPE --> {}, CUT_LAYER --> {}, EPOCHS --> {}, ROUNDS --> {}] ---------- '.format(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6]))
+with open(sys.argv[1], "r") as yamlfile:
+    config = yaml.load(yamlfile, Loader=yaml.FullLoader)
+    print("Read successful")
+
+
+client_total = config["client_total"]
+split_port = config["split_server"]["server_start_port"]
+device = config["device"]
+# cut_layer = config["cut_layer"]
+epochs = config["epoch"]
+rnd = config["round"]
+
+if(device != 'cpu'):
+    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+print(device)
+
+
+if (config["logging"]):
+    # Create and configure logger
+    logging.basicConfig(filename="./cc_sf_server_" + str(client_total) + "_" + str(split_port) + "_" + device +  "_" + epochs + "_" + rnd + ".log",
+                        format='%(asctime)s %(message)s',
+                        filemode='a')
+    # Creating an object
+    logger = logging.getLogger()
+    # Setting the threshold of logger to DEBUG
+    logger.setLevel(logging.INFO)
+    logging.info('Parameters (SF_SERVER_LOG) ---------- [TOTAL_CLIENTS --> {}, STARTING_SERVER_PORT --> {}, DEVICE_TYPE --> {}, CUT_LAYER --> {}, EPOCHS --> {}, ROUNDS --> {}] ---------- '.format(str(client_total), str(split_port), device, str(epochs), str(rnd)))
+
 
 
 def average_weights(w, datasize):
@@ -98,11 +119,7 @@ def worker_routine(url, context, thread_no, r, cut_layer):
     # # logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
     # logging.info('Code started..')
 
-    if(sys.argv[3] == 'cpu'):
-        device = 'cpu'
-    else:
-        device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-    print(device)
+
 
     class ResNet18Server(nn.Module):
         """docstring for ResNet"""
@@ -110,7 +127,7 @@ def worker_routine(url, context, thread_no, r, cut_layer):
         def __init__(self, config):
             super(ResNet18Server, self).__init__()
             self.logits = config["logits"]
-            self.cut_layer = config["cut_layer"]
+            self.cut_layer = cut_layer
 
             self.model = models.resnet18(pretrained=True)
             num_ftrs = self.model.fc.in_features
@@ -129,11 +146,11 @@ def worker_routine(url, context, thread_no, r, cut_layer):
                 x = l(x)
             return nn.functional.softmax(x, dim=1)
 
-    if (sys.argv[4] == 'list'):
-        config = {"cut_layer": cut_layer, "logits": 10}
+    # if (sys.argv[4] == 'list'):
+    config = {"cut_layer": cut_layer, "logits": 10}
 
-    else:
-        config = {"cut_layer": int(sys.argv[4]), "logits": 10}
+    # else:
+    #     config = {"cut_layer": int(sys.argv[4]), "logits": 10}
 
 
     # client_model = ResNet18Client(config).to(device)
@@ -164,7 +181,7 @@ def worker_routine(url, context, thread_no, r, cut_layer):
     send_msg = msg.encode()
     socket.send(send_msg)
 
-    num_epochs = int(sys.argv[5])
+    num_epochs = epochs
 
     round_start_time = time.time()
     for epoch in range(num_epochs):
@@ -178,7 +195,7 @@ def worker_routine(url, context, thread_no, r, cut_layer):
             server_optimizer.zero_grad()
 
             recv_labels = socket.recv()
-            numpy_labels = bytes_to_array(recv_labels)
+            numpy_labels = convert.bytes_to_array(recv_labels)
             labels = torch.from_numpy(numpy_labels)
             labels = labels.to(device)
             # print("labels_recieved")
@@ -188,7 +205,7 @@ def worker_routine(url, context, thread_no, r, cut_layer):
 
             # print("inside for for")
             recv_serv_inputs = socket.recv()
-            numpy_server_inputs = bytes_to_array(recv_serv_inputs)
+            numpy_server_inputs = convert.bytes_to_array(recv_serv_inputs)
             server_inputs = torch.from_numpy(numpy_server_inputs)
             server_inputs = server_inputs.to(device)
             # print("data_recieved")
@@ -206,7 +223,7 @@ def worker_routine(url, context, thread_no, r, cut_layer):
             server_optimizer.step()
 
             transfer_loss = loss.detach().clone()
-            bytes_loss = array_to_bytes(transfer_loss.cpu())
+            bytes_loss = convert.array_to_bytes(transfer_loss.cpu())
             socket.send(bytes_loss)
             # print("loss_sent")
 
@@ -233,7 +250,7 @@ def worker_routine(url, context, thread_no, r, cut_layer):
     server_weights.append(server_model.state_dict())
     datasetsize_server.append(dataset_size)
 
-    model_save_name = "./server_thread_model_r" + str(r) + "_" + str(thread_no) + "_" +sys.argv[1] + "_" + sys.argv[2] + "_" + sys.argv[3] + "_" + sys.argv[4] + "_" + sys.argv[5] + ".pt"
+    model_save_name = "./server_thread_model_r" + str(r) + "_" + str(thread_no) + "_" +str(client_total) + "_" + str(split_port)  + "_" + device +  "_" + str(epochs) + ".pt"
     torch.save(server_model.state_dict(), model_save_name)
     print("***TH - {}***  MODEL_SAVED." .format(thread_no))
 
@@ -258,18 +275,18 @@ def main():
     server_weights = []
     datasetsize_server = []
 
-    total_threads = int(sys.argv[1])
-    port_no = int(sys.argv[2])
+    total_threads = client_total
+    port_no = split_port
     connection_url = ["tcp://*:" +str(port_no+i) for i in range(total_threads)]
     # connection_url = ["tcp://*:5555", "tcp://*:5556"]
 
     server_cut_layer_list = []
-    if(sys.argv[4] == 'list'):
-        for cut in range(total_threads):
-            server_cut_layer_list.append(int(sys.argv[7+cut]))
-        print(server_cut_layer_list)
+    # if(sys.argv[4] == 'list'):
+    for cut in range(total_threads):
+        server_cut_layer_list.append(int(sys.argv[2+cut]))
+    # print(server_cut_layer_list)
 
-    num_rounds = int(sys.argv[6])
+    num_rounds = rnd
     context = zmq.Context()
 
     training_start_time = time.time()
@@ -297,7 +314,8 @@ def main():
         # server_global_weights = average_weights(server_weights, datasetsize_server)
         server_global_weights = server_custom_avg_model(server_weights, datasetsize_server, server_cut_layer_list)
 
-        model_save_name = "./cc_server_fedAvg_model_r" + str(r) + "_" + sys.argv[1] + "_" + sys.argv[2] + "_" + sys.argv[3] + sys.argv[4] + "_" + sys.argv[5] + "_" + sys.argv[6] + ".pt"
+        model_save_name = "./cc_server_fedAvg_model_r" + str(r) + "_" + str(client_total) + "_" + str(split_port)  + "_" + device + "_" + str(server_cut_layer_list) + "_" + str(epochs) + "_" + str(rnd) + ".pt"
+                                                        
         torch.save(server_global_weights, model_save_name)
         print("MODEL_SAVED.")
 

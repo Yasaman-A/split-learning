@@ -3,7 +3,7 @@ import torch.nn as nn
 from torchvision import models
 import copy
 
-model_path = r"G:\MRU\Split Learning\zeroMQ\splitFed\avg\client_fedAvg_model_r1_5_4445_10.pt"
+# model_path = r"G:\MRU\Split Learning\zeroMQ\splitFed\avg\client_fedAvg_model_r1_5_4445_10.pt"
 # model_path = r"G:\MRU\Split Learning\zeroMQ\experiments\exp1\client_model_5555_cpu_3_10.pt"
 
 

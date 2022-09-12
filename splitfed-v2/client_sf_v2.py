@@ -94,13 +94,12 @@ if __name__ == '__main__':
     # Every image is labelled with one of the following class
     classes = ('plane', 'car', 'bird', 'cat',
                'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
-    trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
-                                            download=True, transform=transform)
-
     batch_size = config["batch_size"]
 
     ## Dataloader Splitting....
     if (config["split_type"] == 'n'):
+        trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
+                                            download=True, transform=transform)
         trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
                                                   shuffle=True, num_workers=2)
         datasetsize_used = len(trainset)
@@ -114,8 +113,9 @@ if __name__ == '__main__':
             trainloader = trainloaders[client_id]
         datasetsize_used = len(trainloader.dataset)
 
-    
     else:
+        trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
+                                            download=True, transform=transform)
         dataset_size = len(trainset)                         # 50k images
         total_indices = list(range(dataset_size))
         list_of_indices = np.array_split(
