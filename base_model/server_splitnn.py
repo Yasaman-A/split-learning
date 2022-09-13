@@ -1,6 +1,7 @@
-#
-#   SL Server
-#
+
+"""
+arg1 --> CONFIG_FILE_PATH
+"""
 
 import torchvision
 import torchvision.transforms as transforms
@@ -13,20 +14,31 @@ import time
 import sys
 import zmq
 import torch
-from convert import bytes_to_array, array_to_bytes
+import yaml
+import convert
+from io import BytesIO
+import numpy as np
+
+with open(sys.argv[1], "r") as yamlfile:
+    config = yaml.load(yamlfile, Loader=yaml.FullLoader)
+    print("Read successful")
+
+split_address = config["split_server"]["server_ip"]
+device = config["device"]
+split_port = config["split_server"]["server_start_port"]
+log_steps = config["log_steps"]
+num_epochs = int(config["epoch"])
 
 
 if __name__ == '__main__':
     
     context = zmq.Context()
     socket = context.socket(zmq.REP)
-    url = "tcp://*:"+sys.argv[1]
+    url = "tcp://*:"+ str(split_port)
     socket.bind(url)
 
 
-    if(sys.argv[2] == 'cpu'):
-        device = 'cpu'
-    else:
+    if(device != 'cpu'):
         device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     print(device)
 
@@ -56,7 +68,7 @@ if __name__ == '__main__':
                 x = l(x)
             return nn.functional.softmax(x, dim=1)
 
-    config = {"cut_layer": 3, "logits": 10}
+    config = {"cut_layer": config["cut_layer"], "logits": 10}
     # client_model = ResNet18Client(config).to(device)
     server_model = ResNet18Server(config).to(device)
 
@@ -72,7 +84,7 @@ if __name__ == '__main__':
     send_msg = msg.encode()
     socket.send(send_msg) 
 
-    num_epochs = 50
+    # num_epochs = 50
     for epoch in range(num_epochs):
         running_loss = 0.0
         # for i, data in enumerate(trainloader, 0):
@@ -82,7 +94,7 @@ if __name__ == '__main__':
             server_optimizer.zero_grad()
 
             recv_labels = socket.recv()
-            numpy_labels = bytes_to_array(recv_labels)
+            numpy_labels = convert.bytes_to_array(recv_labels)
             labels = torch.from_numpy(numpy_labels)
             labels = labels.to(device)
             # print("labels_recieved")
@@ -93,7 +105,7 @@ if __name__ == '__main__':
 
             # print("inside for for")
             recv_serv_inputs = socket.recv()
-            numpy_server_inputs = bytes_to_array(recv_serv_inputs)
+            numpy_server_inputs = convert.bytes_to_array(recv_serv_inputs)
             server_inputs = torch.from_numpy(numpy_server_inputs)
             server_inputs = server_inputs.to(device)
             # print("data_recieved")
@@ -111,7 +123,7 @@ if __name__ == '__main__':
             server_optimizer.step()
 
             transfer_loss = loss.detach().clone()
-            bytes_loss = array_to_bytes(transfer_loss.cpu())
+            bytes_loss = convert.array_to_bytes(transfer_loss.cpu())
             socket.send(bytes_loss)
             # print("loss_sent")
 

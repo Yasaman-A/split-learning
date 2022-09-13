@@ -1,7 +1,6 @@
-#
-#   SL Client
-#
-
+"""
+arg1 --> CONFIG_FILE_PATH
+"""
 import torchvision
 import torchvision.transforms as transforms
 import torch.nn as nn
@@ -13,19 +12,33 @@ import time
 import sys
 import zmq
 import torch
-from convert import array_to_bytes, bytes_to_array
+import convert
 import logging
+import yaml
 
-# Create and configure logger
-logging.basicConfig(filename="client1_newfile.log",
+
+with open(sys.argv[1], "r") as yamlfile:
+    config = yaml.load(yamlfile, Loader=yaml.FullLoader)
+    print("Read successful")
+
+
+split_address = config["split_server"]["server_ip"]
+split_port = config["split_server"]["server_start_port"]
+log_steps = config["log_steps"]
+num_epochs = int(config["epoch"])
+device = config["device"]
+cut_layer = config["cut_layer"]
+batch_size = config["batch_size"]
+
+if (config["logging"]):
+    # Create and configure logger
+    logging.basicConfig(filename="client1_newfile.log",
                     format='%(asctime)s %(message)s',
                     filemode='a')
-
-# Creating an object
-logger = logging.getLogger()
-
-# Setting the threshold of logger to DEBUG
-logger.setLevel(logging.INFO)
+    # Creating an object
+    logger = logging.getLogger()
+    # Setting the threshold of logger to DEBUG
+    logger.setLevel(logging.INFO)
 
 
 if __name__ == '__main__':
@@ -33,12 +46,10 @@ if __name__ == '__main__':
 
     #  Socket to talk to server
     socket = context.socket(zmq.REQ)
-    url = "tcp://"+sys.argv[1] + ":"+sys.argv[2]
+    url = split_address + ":"+ str(split_port)
     socket.connect(url)
 
-    if(sys.argv[3] == 'cpu'):
-        device = 'cpu'
-    else:
+    if(device != 'cpu'):
         device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     print(device)
     # device = 'cpu'
@@ -53,12 +64,12 @@ if __name__ == '__main__':
                'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
     trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
                                             download=True, transform=transform)
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=128,
+    trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
                                               shuffle=True, num_workers=2)
 
     testset = torchvision.datasets.CIFAR10(root='./data', train=False,
                                            download=True, transform=transform)
-    testloader = torch.utils.data.DataLoader(testset, batch_size=128,
+    testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
                                              shuffle=False, num_workers=2)
 
     # Explain nn.Module and explain the forward and backward pass
@@ -86,7 +97,7 @@ if __name__ == '__main__':
                 x = l(x)
             return x
 
-    config = {"cut_layer": 3, "logits": 10}
+    config = {"cut_layer": cut_layer, "logits": 10}
     client_model = ResNet18Client(config).to(device)
 
     criterion = nn.CrossEntropyLoss()
@@ -102,8 +113,9 @@ if __name__ == '__main__':
     # print(recv_names)
 
 
-    log_steps = 50
-    num_epochs = 2
+    # log_steps = 
+    # num_epochs = 2
+    
     for epoch in range(num_epochs):
         running_loss = 0.0
         for i, data in enumerate(trainloader, 0):
@@ -113,7 +125,7 @@ if __name__ == '__main__':
             client_optimizer.zero_grad()
 
             # print("LABELS", type(labels))
-            bytes_labels = array_to_bytes(labels.cpu())
+            bytes_labels = convert.array_to_bytes(labels.cpu())
             socket.send(bytes_labels)
             # print("labels_sent")
             
@@ -127,12 +139,12 @@ if __name__ == '__main__':
             server_inputs = activations.detach().clone()
             
             # print("inside for for...")
-            bytes_server_inputs = array_to_bytes(server_inputs.cpu())
+            bytes_server_inputs = convert.array_to_bytes(server_inputs.cpu())
             socket.send(bytes_server_inputs)
 
             ###################################################################################################
             recv_loss = socket.recv()
-            numpy_loss = bytes_to_array(recv_loss)
+            numpy_loss = convert.bytes_to_array(recv_loss)
             loss = torch.from_numpy(numpy_loss)
             loss = loss.to(device)
 
@@ -144,6 +156,3 @@ if __name__ == '__main__':
                 print('[{}, {}] loss: {}'.format(epoch + 1, i + 1, running_loss / log_steps))
                 logging.info('[{}, {}] loss: {}'.format(epoch + 1, i + 1, running_loss / log_steps))
                 running_loss = 0.0
-
-
-#################################################################################################################################
