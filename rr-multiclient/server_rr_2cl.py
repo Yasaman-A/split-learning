@@ -4,7 +4,6 @@ arg1 --> CONFIG_FILE_PATH
 """
 
 
-# eg command: python server_rr_2cl.py 2 5555 cpu
 
 import torchvision
 import torchvision.transforms as transforms
@@ -189,9 +188,3 @@ if __name__ == '__main__':
 
             socket.close()
             context.term()
-
-
-        
-
-
-##################################################################################################################

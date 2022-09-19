@@ -1,5 +1,8 @@
 from io import BytesIO
 import numpy as np
+import json
+from collections import OrderedDict
+import pickle
 
 
 def array_to_bytes(x: np.ndarray) -> bytes:
@@ -11,6 +14,17 @@ def array_to_bytes(x: np.ndarray) -> bytes:
 def bytes_to_array(b: bytes) -> np.ndarray:
     np_bytes = BytesIO(b)
     return np.load(np_bytes, allow_pickle=True)
+
+
+def ordered_dict_to_bytes(weights):
+    data = pickle.dumps(weights)
+    # print(type(data))
+    return data
+
+
+def bytes_to_dict(b: bytes) -> OrderedDict:
+    # print("inside conversion...........")
+    return pickle.loads(b)
 
 # ----------
 # quick test
