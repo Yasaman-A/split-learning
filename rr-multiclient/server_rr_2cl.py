@@ -1,9 +1,8 @@
 
 """
-arg1 --> total number of clients
-arg2 --> STARTING_PORT_NO
-arg3 --> 'cpu' or 'gpu'
+arg1 --> CONFIG_FILE_PATH
 """
+
 
 # eg command: python server_rr_2cl.py 2 5555 cpu
 
@@ -17,17 +16,26 @@ from torch.autograd import Variable
 import time
 import zmq
 import torch
-from convert import bytes_to_array, array_to_bytes
+import convert
 import sys
+import yaml
 
+with open(sys.argv[1], "r") as yamlfile:
+    config = yaml.load(yamlfile, Loader=yaml.FullLoader)
+    print("Read successful")
+
+
+client_total = config["client_total"]
+split_port = config["split_server"]["server_start_port"]
+device = config["device"]
+num_epochs = config["epoch"]
+cut_layer = config["cut_layer"]
 
 if __name__ == '__main__':
 
 
     ##################################################################################################################
-    if(sys.argv[3] == 'cpu'):
-        device = 'cpu'
-    else:
+    if(device != 'cpu'):
         device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     print(device)
 
@@ -56,7 +64,7 @@ if __name__ == '__main__':
                 x = l(x)
             return nn.functional.softmax(x, dim=1)
 
-    config = {"cut_layer": 3, "logits": 10}
+    config = {"cut_layer": cut_layer, "logits": 10}
     # client_model = ResNet18Client(config).to(device)
     server_model = ResNet18Server(config).to(device)
 
@@ -66,17 +74,17 @@ if __name__ == '__main__':
         server_model.parameters(), lr=0.01, momentum=0.9)
 
     # change depending on clients
-    total_client_num = int(sys.argv[1])
+    total_client_num = int(client_total)
 
     # clients_connection_url = ["tcp://*:5555", "tcp://*:5556"]        # manually type the IPs of the client.
-    port_no = int(sys.argv[2])
-    clients_connection_url = ["tcp://*:" + str(port_no+i) for i in range(total_client_num)]
+    port_no = int(split_port)
+    clients_connection_url = ["tcp://*:" + str(split_port+i) for i in range(client_total)]
     client_weights = [None] * total_client_num
 
     msg = "Starting the server"
     send_msg = msg.encode()
 
-    num_epochs = 50                ## fixed manually, if changed inform all clients
+    # num_epochs = 50                ## fixed manually, if changed inform all clients
     for epoch in range(num_epochs):
         print("EPOCH NO in server:- ", epoch)
         # Iterate over multiple clients in one epoch
@@ -133,7 +141,7 @@ if __name__ == '__main__':
                 server_optimizer.zero_grad()
 
                 recv_labels = socket.recv()
-                numpy_labels = bytes_to_array(recv_labels)
+                numpy_labels = convert.bytes_to_array(recv_labels)
                 labels = torch.from_numpy(numpy_labels)
                 labels = labels.to(device)
                 # print("labels_recieved")
@@ -143,7 +151,7 @@ if __name__ == '__main__':
 
                 # print("inside for for")
                 recv_serv_inputs = socket.recv()
-                numpy_server_inputs = bytes_to_array(recv_serv_inputs)
+                numpy_server_inputs = convert.bytes_to_array(recv_serv_inputs)
                 server_inputs = torch.from_numpy(numpy_server_inputs)
                 server_inputs = server_inputs.to(device)
                 # print("data_recieved")
@@ -161,7 +169,7 @@ if __name__ == '__main__':
                 server_optimizer.step()
 
                 transfer_loss = loss.detach().clone()
-                bytes_loss = array_to_bytes(transfer_loss.cpu())
+                bytes_loss = convert.array_to_bytes(transfer_loss.cpu())
                 socket.send(bytes_loss)
                 # print("loss_sent")
 

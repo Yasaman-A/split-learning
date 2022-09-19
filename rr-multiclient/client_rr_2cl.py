@@ -1,14 +1,9 @@
-
 """
-arg1 --> SERVER_IP
-arg2 --> SERVER_PORT
-arg3 --> 'cpu' or 'gpu'
-arg4 --> client number
+arg1 --> CONFIG_FILE_PATH
+arg2 --> CLIENT_ID
 """
 
-# eg command: python client_rr_2cl.py localhost 5555 cpu 0
-# eg command: python client_rr_2cl.py localhost 5556 cpu 1
-
+from locale import atoi
 import torchvision
 import torchvision.transforms as transforms
 import torch.nn as nn
@@ -16,35 +11,45 @@ import torch.nn.functional as F
 from torchvision import models
 import torch.optim as optim
 from torch.autograd import Variable
-import time
 import zmq
 import torch
-from convert import array_to_bytes, bytes_to_array, ordered_dict_to_bytes, bytes_to_dict
-
+import convert
+import yaml
 import logging
 from sys import getsizeof
 import sys
 # from objsize import get_deep_size
 
-# Create and configure logger
-logging.basicConfig(filename="client"+sys.argv[4]+"_newfile.log",
-                    format='%(asctime)s %(message)s',
-                    filemode='a')
+with open(sys.argv[1], "r") as yamlfile:
+    config = yaml.load(yamlfile, Loader=yaml.FullLoader)
+    print("Read successful")
 
-# Creating an object
-logger = logging.getLogger()
+client_id = atoi(sys.argv[2])
+split_address = config["split_server"]["server_ip"]
+split_port = config["split_server"]["server_start_port"]+client_id-1
+log_steps = config["log_steps"]
+num_epochs = int(config["epoch"])
+batch_size = config["batch_size"]
+device = config["device"]
+cut_layer = config["cut_layer"]
 
-# Setting the threshold of logger to DEBUG
-logger.setLevel(logging.INFO)
+if (config["logging"]):
+    # Create and configure logger
+    logging.basicConfig(filename="client"+ client_id +"_newfile.log",
+                        format='%(asctime)s %(message)s',
+                        filemode='a')
+
+    # Creating an object
+    logger = logging.getLogger()
+
+    # Setting the threshold of logger to DEBUG
+    logger.setLevel(logging.INFO)
 
 
 if __name__ == '__main__':
 
-    if(sys.argv[3] == 'cpu'):
-        device = 'cpu'
-    else:
-        device = torch.device(
-            'cuda') if torch.cuda.is_available() else torch.device('cpu')
+    if(device != 'cpu'):
+        device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     print(device)
 
     transform = transforms.Compose(
@@ -57,12 +62,12 @@ if __name__ == '__main__':
                'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
     trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
                                             download=True, transform=transform)
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=128,
+    trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
                                               shuffle=True, num_workers=2)
 
     testset = torchvision.datasets.CIFAR10(root='./data', train=False,
                                            download=True, transform=transform)
-    testloader = torch.utils.data.DataLoader(testset, batch_size=128,
+    testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
                                              shuffle=False, num_workers=2)
 
     # Explain nn.Module and explain the forward and backward pass
@@ -74,7 +79,7 @@ if __name__ == '__main__':
         def __init__(self, config):
             super(ResNet18Client, self).__init__()
             # Explain this line
-            self.cut_layer = config["cut_layer"]
+            self.cut_layer = cut_layer
 
             # Explain this line
             self.model = models.resnet18(pretrained=False)
@@ -90,7 +95,7 @@ if __name__ == '__main__':
                 x = l(x)
             return x
 
-    config = {"cut_layer": 3, "logits": 10}
+    config = {"cut_layer": cut_layer, "logits": 10}
     client_model = ResNet18Client(config).to(device)
 
     criterion = nn.CrossEntropyLoss()
@@ -98,10 +103,10 @@ if __name__ == '__main__':
         client_model.parameters(), lr=0.01, momentum=0.9)
 
 
-    client_num = int(sys.argv[4])                             ## Very Imp, type manually type client num
-    num_epochs = 50                            ## to be manually fixed..
+    client_num = client_id                            ## Very Imp, type manually type client num
+    # num_epochs = 50                            ## to be manually fixed..
     for epoch in range(num_epochs):
-        print("EPOCH NO in client:- ", epoch)
+        print("EPOCH NO in client-side:- ", epoch)
         running_loss = 0.0
 
 
@@ -110,9 +115,9 @@ if __name__ == '__main__':
         context = zmq.Context()
 
         #  Socket to talk to server
-        print("Connecting to hello world server…")
+        print("Connecting to server…")
         socket = context.socket(zmq.REQ)
-        url = "tcp://"+sys.argv[1] + ":"+sys.argv[2]
+        url = split_address+ ":"+str(split_port)
         socket.connect(url)
         # socket.connect("tcp://35.237.244.119:5555")
 
@@ -131,14 +136,14 @@ if __name__ == '__main__':
         weights = socket.recv()
         print("Weights recieved")
 
-        if client_num == 0 and epoch == 0:
+        if client_num == 1 and epoch == 0:
             decoded_msg = weights.decode()
             if decoded_msg == "initial_start":
                 None
         
         else:
             # weights = socket.recv()
-            numpy_weights = bytes_to_dict(weights)
+            numpy_weights = convert.bytes_to_dict(weights)
             client_model.load_state_dict(numpy_weights)
             print("MODEL LOADED")
 
@@ -155,7 +160,7 @@ if __name__ == '__main__':
             client_optimizer.zero_grad()
 
             # print("LABELS", type(labels))
-            bytes_labels = array_to_bytes(labels.cpu())
+            bytes_labels = convert.array_to_bytes(labels.cpu())
             socket.send(bytes_labels)
             # print("labels_sent")
 
@@ -169,7 +174,7 @@ if __name__ == '__main__':
             server_inputs = activations.detach().clone()
 
             # print("inside for for...")
-            bytes_server_inputs = array_to_bytes(server_inputs.cpu())
+            bytes_server_inputs = convert.array_to_bytes(server_inputs.cpu())
             socket.send(bytes_server_inputs)
             # print("data_sent")
 
@@ -187,7 +192,7 @@ if __name__ == '__main__':
             ################################################################################
 
             recv_loss = socket.recv()
-            numpy_loss = bytes_to_array(recv_loss)
+            numpy_loss = convert.bytes_to_array(recv_loss)
             loss = torch.from_numpy(numpy_loss)
             loss = loss.to(device)
             # print("loss_recieved")
@@ -213,8 +218,8 @@ if __name__ == '__main__':
         ## send client weights..
         weights = client_model.state_dict()
         print(type(weights))
-        print("SIze of model weights in bytes is:-", getsizeof(weights))
-        bytes_weights = ordered_dict_to_bytes(weights)
+        print("Size of model weights in bytes is:-", getsizeof(weights))
+        bytes_weights = convert.ordered_dict_to_bytes(weights)
         # time.sleep(10)
         socket.send(bytes_weights)
         del weights
