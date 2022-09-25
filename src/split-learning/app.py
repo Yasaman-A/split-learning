@@ -29,7 +29,7 @@ class Main:
         parser.add_argument('--extra', type=str, help='Run client with id.')
 
         # Arguments for creating the no_iid pickle file. If this exists, it will have priority over the above
-        parser.add_argument('--generate', type=str, help='For non-iid.')
+        parser.add_argument('--generate', action='store_true', help='For non-iid.')
         parser.add_argument('--classes_pc', type=int, default=2, help='For non-iid.')
         parser.add_argument('--num_clients', type=int, default=6, help='For non-iid.')
         parser.add_argument('--batch_size', type=int, default=128, help='For non-iid.')
