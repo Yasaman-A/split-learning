@@ -1,14 +1,10 @@
-<<<<<<< HEAD
 *.pickle*
 data/
 *.pt
 output.pickle*
 **/output.pickle*
-
-=======
 *.swp
 **/*.swp
->>>>>>> base_model
 .DS_Store
 **/.DS_Store
 
