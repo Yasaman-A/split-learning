@@ -1,3 +1,4 @@
+split-learning.code-workspace
 *.pickle*
 data/
 *.pt

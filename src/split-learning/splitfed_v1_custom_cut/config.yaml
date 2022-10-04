@@ -2,10 +2,10 @@ logging: false
 log_steps: 50
 #cpu OR gpu
 device: cpu
-client_total: 2
+client_total: 3
 #cut_layer: 3
-epoch: 5
-round: 10
+epoch: 1
+round: 2
 batch_size: 128
 # n for no_split, s: for getting split i from data server, Any number for the number of i.i.d splits.
 split_type: s

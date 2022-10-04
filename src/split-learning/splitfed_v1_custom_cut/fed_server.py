@@ -94,7 +94,7 @@ class Runner:
             print("Waiting for weights from client {}".format(thread_no))
             weights = socket.recv()
             print("Weights recieved from client {}".format(thread_no))
-            numpy_weights = bytes_to_dict(weights)
+            numpy_weights = convert.bytes_to_dict(weights)
             client_weights.append(numpy_weights)
 
             msg = "weights_recv"
@@ -104,7 +104,7 @@ class Runner:
             recv_dataset_size = socket.recv()
             dataset_size = int(recv_dataset_size.decode())
             datasetsize_client.append(dataset_size)
-            print(dataset_size)
+            # print(dataset_size)
 
             msg = "dataset_size_recv"
             send_msg = msg.encode()
@@ -113,7 +113,7 @@ class Runner:
             recv_cut_layer = socket.recv()
             cut_layer = int(recv_cut_layer.decode())
             client_cut_layer_list.append(cut_layer)
-            print(cut_layer)
+            # print(cut_layer)
 
             msg = "cut_layer_recv"
             send_msg = msg.encode()
@@ -146,7 +146,7 @@ class Runner:
             recv_names = names.decode()
 
             print("SIze of global model weights (before) in bytes is:-", getsizeof(client_global_weights))
-            global_bytes_weights = ordered_dict_to_bytes(client_global_weights)
+            global_bytes_weights = convert.ordered_dict_to_bytes(client_global_weights)
             print("SIze of global model weights (after) in bytes is:-",
                   getsizeof(global_bytes_weights))
             # time.sleep(10)
@@ -198,9 +198,9 @@ class Runner:
                 for thread in thrs:  # have to check when it will run all epochs..
                     thread.join()
 
-                print("Length of client weights:- ", len(client_weights))
-                print("Length of dataset:- ", len(datasetsize_client))
-                print("Length of cut_layers:- ", len(client_cut_layer_list))
+                print("Length of client weights:  ", len(client_weights))
+                print("Length of dataset: ", len(datasetsize_client))
+                print("Length of cut_layers: ", len(client_cut_layer_list))
 
 
                 # Client models weighted averaging..

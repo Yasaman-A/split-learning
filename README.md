@@ -3,6 +3,7 @@
 In this repository, we have implemented split learning with different architectures. The implemented architectures and the commands to run them are described below.  
 
 
+When starting in a new platform, first install the requirements: `pip3 install -r requirements.txt`
 To start, first enable the python environment: `source venv/bin/activate`
 To stop your python environment, deactivate it: `deactivate`
 
@@ -58,11 +59,9 @@ Clients in this architecture can have different cut layers. The current implemen
 
 
 ## Splitting Data
-Running non-iid.py will resolve in the number of non-idd data splits. To run this code, use: `python3 non-iid.py classes_pc num_clients batch_size`, e.g., `python3 non-iid.py 2 6 128`. 
-
-Using `--generate` you can run the non-iid.py script which generates data splits:
+Running non-iid.py will resolve in the number of non-idd data splits. Using `--generate` you can run the non-iid.py script from the `root` folder which generates data splits:
 `python -m src.split-learning --generate` this code can accept three parameters: `--classes_pc`, `--num_clients`, and `--batch_size`. If any of these parameters are not passed, then the default values of 2, 6, 128 will be used. To generate data with non-default values:
-`python -m src.split-learning --generate --classes_pc 3 --num_clients 8 --batch_size 256`
+`python -m src.split-learning --generate --classes_pc 4 --num_clients 6 --batch_size 128`
 
 
 Note: if you need to devide code among *x* clients, pass *x+1* as the *num_clients*. This is due to the implementation of the code that assigns very few data points to the last client which makes the last split to be a useless split.

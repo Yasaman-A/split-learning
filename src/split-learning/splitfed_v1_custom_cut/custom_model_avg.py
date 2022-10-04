@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from torchvision import models
 import copy
+from locale import atoi
 
 # model_path = r"G:\MRU\Split Learning\zeroMQ\splitFed\avg\client_fedAvg_model_r1_5_4445_10.pt"
 # model_path = r"G:\MRU\Split Learning\zeroMQ\experiments\exp1\client_model_5555_cpu_3_10.pt"
@@ -92,6 +93,7 @@ class Cl_Custom_Avg(nn.Module):
                 flag = False
 
                 for i in range(0, len(model_list)):
+                    print("cut_layer_list1" + str(i) + ":" + str(cut_layer_list[i]))
                     if(cut_layer_list[i] >= l):
                         # print("INSIDE IF>>>")
 
@@ -163,7 +165,8 @@ class Serv_Custom_Avg(nn.Module):
                 flag = False
 
                 for i in range(0, len(model_list)):
-                    if(cut_layer_list[i] < l):
+                    print("cut_layer_list" + str(i) + ":" + str(cut_layer_list[i]))
+                    if(atoi(cut_layer_list[i]) < l):
                         # print("INSIDE IF>>>")
 
                         flag = True

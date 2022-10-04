@@ -277,7 +277,7 @@ class Runner:
             socket.close()
             context.term()
 
-            model_save_name = "./cc_client_thread_model_r" + str(r) + "_" + str(self.client_id) + "_" + split_port + "_" + self.config["device"] + "_" + str(cut_layer) + "_" + self.config["epoch"] + "_" + self.config["split_type"] + "_" + str(self.client_id) + "_" + self.config["batch_size"] + "_" + self.config["round"] + "_" + fed_port + ".pt"
+            model_save_name = "./cc_client_thread_model_r" + str(r) + "_" + str(self.client_id) + "_" + str(split_port) + "_" + self.config["device"] + "_" + str(cut_layer) + "_" + str(self.config["epoch"]) + "_" + self.config["split_type"] + "_" + str(self.client_id) + "_" + str(self.config["batch_size"]) + "_" + str(self.config["round"]) + "_" + str(fed_port) + ".pt"
             torch.save(client_model.state_dict(), model_save_name)
             print("***TH - {}***  MODEL_SAVED." .format(self.client_id))
 
@@ -292,15 +292,15 @@ class Runner:
             #  Socket to talk to server
             print("Connecting to fed_avg server to give weights…")
             socket1 = context1.socket(zmq.REQ)
-            url = self.config["fed_server"]["server_ip"] + ":"+ fed_port
+            url = str(self.config["fed_server"]["server_ip"]) + ":"+ str(fed_port)
             socket1.connect(url)
             # socket.connect("tcp://35.237.244.119:5555")
 
             weights = client_model.state_dict()
             # print(type(weights))
-            print("SIze of model weights (before) in bytes is:-", getsizeof(weights))
+            print("Size of model weights (before) in bytes is:-", getsizeof(weights))
             bytes_weights = convert.ordered_dict_to_bytes(weights)
-            print("SIze of model weights (after) in bytes is:-",
+            print("Size of model weights (after) in bytes is:-",
                   getsizeof(bytes_weights))
             # time.sleep(10)
             socket1.send(bytes_weights)
@@ -340,7 +340,7 @@ class Runner:
             #  Socket to talk to server
             print("Connecting to fed_avg server to recv global weights…")
             socket2 = context2.socket(zmq.REQ)
-            url = self.config["fed_server"]["server_ip"] + ":"+ fed_port
+            url = str(self.config["fed_server"]["server_ip"]) + ":"+ str(fed_port)
             socket2.connect(url)
             # socket.connect("tcp://35.237.244.119:5555")
 
