@@ -1,7 +1,7 @@
-pytest==5.3.2
-pytest-cov==2.8.1
-numpy==1.23.3
-torchvision==0.13.1
-pyzmq==24.0.1
+pytest==8.3.2
+pytest-cov==5.0.0
+numpy==2.0.1
+torchvision==0.17.2
+pyzmq==26.1.0
 zmq==0.0.0
-tqdm==4.64.1
+tqdm==4.66.5
