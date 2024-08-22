@@ -277,7 +277,13 @@ class Runner:
             socket.close()
             context.term()
 
-            model_save_name = "./client_thread_model_r" + str(r) + "_" + str(self.client_id) + "_" + str(split_port) + "_" + config["device"] + "_" + config["cut_layer"] + "_" + config["epoch"] + "_" + config["split_type"] + "_" + str(self.client_id) + "_" + config["batch_size"] + "_" + config["round"] + "_" + str(fed_port) + ".pt"
+            # model_save_name = "./client_thread_model_r" + str(r) + "_" + str(self.client_id) + "_" + str(split_port) + "_" + config["device"] + "_" + config["cut_layer"] + "_" + config["epoch"] + "_" + config["split_type"] + "_" + str(self.client_id) + "_" + config["batch_size"] + "_" + config["round"] + "_" + str(fed_port) + ".pt"
+            # Consistent use of self.config (resolving KeyError: 'device')
+            model_save_name = ("./client_thread_model_r" + str(r) + "_" + str(self.client_id) + "_" + str(split_port) + "_" + 
+                               self.config.get("device", "cpu") + "_" + str(self.config["cut_layer"]) + "_" + 
+                               str(self.config["epoch"]) + "_" + self.config["split_type"] + "_" + str(self.client_id) + "_" + 
+                               str(self.config["batch_size"]) + "_" + str(self.config["round"]) + "_" + str(fed_port) + ".pt")
+
             torch.save(client_model.state_dict(), model_save_name)
             print("***TH - {}***  MODEL_SAVED." .format(self.client_id))
 

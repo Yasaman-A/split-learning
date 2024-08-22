@@ -98,6 +98,9 @@ class Runner:
             # # logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
             # logging.info('Code started..')
 
+            # Fixing UnboundLocalError to ensure that device is always initialized
+            device = self.config["device"]
+            
             if(self.config["device"] != 'cpu'):
                 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
