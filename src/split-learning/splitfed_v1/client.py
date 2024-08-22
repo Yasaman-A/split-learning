@@ -298,7 +298,11 @@ class Runner:
             #  Socket to talk to server
             print("Connecting to fed_avg server to aggregate weights …")
             socket1 = context1.socket(zmq.REQ)
-            url = config["fed_server"]["server_ip"] + ":"+ fed_port
+
+            # Trying to solve KeyError: 'fed_server'
+            # url = config["fed_server"]["server_ip"] + ":"+ fed_port
+            url = self.config["fed_server"]["server_ip"] + ":" + str(fed_port)
+            
             socket1.connect(url)
             # socket.connect("tcp://35.237.244.119:5555")
 
@@ -337,7 +341,11 @@ class Runner:
             #  Socket to talk to server
             print("Connecting to fed_avg server to recv global weights…")
             socket2 = context2.socket(zmq.REQ)
-            url = config["split_server"]["server_ip"] + ":"+ fed_port
+            
+            # Trying to solve KeyError: 'split_server'
+            # url = config["split_server"]["server_ip"] + ":"+ fed_port
+            url = self.config["split_server"]["server_ip"] + ":" + str(fed_port)
+
             socket2.connect(url)
             # socket.connect("tcp://35.237.244.119:5555")
 
