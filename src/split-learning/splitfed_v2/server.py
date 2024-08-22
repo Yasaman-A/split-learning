@@ -183,7 +183,10 @@ class Runner:
                     self.logits = config["logits"]
                     self.cut_layer = config["cut_layer"]
 
-                    self.model = models.resnet18(pretrained=True)
+                    # self.model = models.resnet18(pretrained=True)
+                    # Newer version of (pretrained=True)
+                    self.model = models.resnet18(weights=ResNet18_Weights.DEFAULT)
+
                     num_ftrs = self.model.fc.in_features
                     # Explain this part
                     self.model.fc = nn.Sequential(nn.Flatten(),

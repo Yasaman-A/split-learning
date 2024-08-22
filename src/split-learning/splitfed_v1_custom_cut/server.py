@@ -23,6 +23,7 @@ import torchvision.transforms as transforms
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import models
+from torchvision.models import ResNet18_Weights
 import torch.optim as optim
 from torch.autograd import Variable
 import time
@@ -135,7 +136,10 @@ class Runner:
                     self.logits = config["logits"]
                     self.cut_layer = atoi(cut_layer)
 
-                    self.model = models.resnet18(pretrained=True)
+                    # self.model = models.resnet18(pretrained=True)
+                    # Newer version of (pretrained=True)
+                    self.model = models.resnet18(weights=ResNet18_Weights.DEFAULT)
+
                     num_ftrs = self.model.fc.in_features
                     # Explain this part
                     self.model.fc = nn.Sequential(nn.Flatten(),
