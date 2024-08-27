@@ -133,9 +133,9 @@ class Runner:
             names = socket.recv()
             recv_names = names.decode()
 
-            print("Size of global model weights (before) in bytes is:-", getsizeof(client_global_weights))
+            print("Size of global model weights (before) in bytes is:", getsizeof(client_global_weights))
             global_bytes_weights = convert.ordered_dict_to_bytes(client_global_weights)
-            print("Size of global model weights (after) in bytes is:-",
+            print("Size of global model weights (after) in bytes is:",
                   getsizeof(global_bytes_weights))
             # time.sleep(10)
             socket.send(global_bytes_weights)
@@ -174,15 +174,15 @@ class Runner:
                 # Launch pool of worker threads
                 for i in range(total_threads):  # this defines how many clients can connect
                     thread = threading.Thread(target=get_weights, args=(
-                        connection_url[i], context, i))
+                        connection_url[i], context, i+1))
                     thrs.append(thread)
                     thread.start()
 
                 for thread in thrs:  # have to check when it will run all epochs..
                     thread.join()
 
-                print("Length of client weights:- ", len(client_weights))
-                print("Length of dataset:- ", len(datasetsize_client))
+                print("Length of client weights:", len(client_weights))
+                print("Length of dataset:", len(datasetsize_client))
 
                 # Client models weighted averaging..
                 client_global_weights = average_weights(client_weights, datasetsize_client)
@@ -197,7 +197,7 @@ class Runner:
                 # Launch pool of worker threads
                 for i in range(total_threads):  # this defines how many clients can connect
                     thread = threading.Thread(target=send_weights, args=(
-                        connection_url[i], context, i))
+                        connection_url[i], context, i+1))
                     thrs.append(thread)
                     thread.start()
 

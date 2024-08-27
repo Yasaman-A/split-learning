@@ -308,9 +308,9 @@ class Runner:
 
             weights = client_model.state_dict()
             # print(type(weights))
-            print("SIze of model weights (before) in bytes is:-", getsizeof(weights))
+            print("Size of model weights (before) in bytes is:", getsizeof(weights))
             bytes_weights = convert.ordered_dict_to_bytes(weights)
-            print("SIze of model weights (after) in bytes is:-",
+            print("Size of model weights (after) in bytes is:",
                   getsizeof(bytes_weights))
             # time.sleep(10)
             socket1.send(bytes_weights)
@@ -355,9 +355,9 @@ class Runner:
 
             global_weights = socket2.recv()
             print("Global weights recieved from fedServer")
-            print("SIze of global model weights (before) in bytes is:-", getsizeof(global_weights))
+            print("Size of global model weights (before) in bytes is:", getsizeof(global_weights))
             global_numpy_weights = convert.bytes_to_dict(global_weights)
-            print("SIze of global model weights (after) in bytes is:-", getsizeof(global_numpy_weights))
+            print("Size of global model weights (after) in bytes is:", getsizeof(global_numpy_weights))
 
             socket2.close()
             context2.term()

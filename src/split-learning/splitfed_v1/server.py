@@ -51,7 +51,7 @@ class Runner:
             logger.setLevel(logging.INFO)
             logging.info('Parameters (SF_SERVER_LOG) ---------- [TOTAL_CLIENTS --> {}, STARTING_SERVER_PORT --> {}, DEVICE_TYPE --> {}, CUT_LAYER --> {}, EPOCHS --> {}, ROUNDS --> {}] ---------- '.format(str(client_total), str(split_port), device, str(cut_layer), str(epochs), str(rnd)))
 
-        def average_weights(self, w, datasize):
+        def average_weights(w, datasize):
             """
             Returns the average of the weights.
             """
@@ -273,15 +273,15 @@ class Runner:
 
                 # Launch pool of worker threads
                 for i in range(total_threads):  # this defines how many clients can connect
-                    thread = threading.Thread(target=worker_routine, args=(connection_url[i], context, i, r))
+                    thread = threading.Thread(target=worker_routine, args=(connection_url[i], context, i+1, r))
                     thrs.append(thread)
                     thread.start()
 
                 for thread in thrs:         ##have to check when it will run all epochs..
                     thread.join()
 
-                print("Length of server weights:- ", len(server_weights))
-                print("Length of dataset:- ", len(datasetsize_server))
+                print("Length of server weights:", len(server_weights))
+                print("Length of dataset:", len(datasetsize_server))
 
 
                 # Server models weighted averaging..
