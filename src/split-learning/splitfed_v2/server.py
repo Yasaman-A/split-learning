@@ -12,6 +12,7 @@ import torchvision.transforms as transforms
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import models
+from torchvision.models import ResNet18_Weights
 import torch.optim as optim
 from torch.autograd import Variable
 import time
@@ -234,7 +235,7 @@ class Runner:
                     # print("NEW_SHUFFLED_CLIENTS_FOR_THIS_EPOCH --> {}".format(connection_url))
                     # logging.info("NEW_SHUFFLED_CLIENTS_FOR_THIS_EPOCH --> {}".format(connection_url))
                     for cl in range(client_total):
-                        client_no = cl
+                        client_no = cl + 1
                         # worker_routine(connection_url[cl], context, cl, r)
 
                         ##################################################
@@ -262,6 +263,7 @@ class Runner:
                         dataset_size = int(recv_dataset_size.decode())
                         print(dataset_size)
 
+                        # After each iteration in client there's a message, ? if needed
                         msg = "Starting the server"
                         send_msg = msg.encode()
                         socket.send(send_msg)

@@ -287,15 +287,15 @@ class Runner:
             #  Socket to talk to server
             print("Connecting to fed_avg server to give weights…")
             socket1 = context1.socket(zmq.REQ)
-            url = self.config["fed_server"]["server_ip"] + ":"+ fed_port
+            url = self.config["fed_server"]["server_ip"] + ":" + str(fed_port)
             socket1.connect(url)
             # socket.connect("tcp://35.237.244.119:5555")
 
             weights = client_model.state_dict()
             # print(type(weights))
-            print("Size of model weights (before) in bytes is:-", getsizeof(weights))
+            print("Size of model weights (before) in bytes is:", getsizeof(weights))
             bytes_weights = convert.ordered_dict_to_bytes(weights)
-            print("Size of model weights (after) in bytes is:-",
+            print("Size of model weights (after) in bytes is:",
                   getsizeof(bytes_weights))
             # time.sleep(10)
             socket1.send(bytes_weights)
@@ -326,7 +326,11 @@ class Runner:
             #  Socket to talk to server
             print("Connecting to fed_avg server to recv global weights…")
             socket2 = context2.socket(zmq.REQ)
-            url = "tcp://"+sys.argv[11] + ":"+sys.argv[12]
+            
+            # Resolving IndexError: list index out of range
+            # url = "tcp://"+sys.argv[11] + ":"+sys.argv[12]
+            url = self.config["fed_server"]["server_ip"] + ":" + str(self.config["fed_server"]["server_start_port"] + self.client_id - 1)
+            
             socket2.connect(url)
             # socket.connect("tcp://35.237.244.119:5555")
 
@@ -336,9 +340,9 @@ class Runner:
 
             global_weights = socket2.recv()
             # print("Global weights recieved from fedServer")
-            print("Size of global model weights (before) in bytes is:-", getsizeof(global_weights))
+            print("Size of global model weights (before) in bytes is:", getsizeof(global_weights))
             global_numpy_weights = convert.bytes_to_dict(global_weights)
-            print("Size of global model weights (after) in bytes is:-", getsizeof(global_numpy_weights))
+            print("Size of global model weights (after) in bytes is:", getsizeof(global_numpy_weights))
 
             socket2.close()
             context2.term()
