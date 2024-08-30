@@ -305,15 +305,15 @@ class Runner:
 
                 # Launch pool of worker threads
                 for i in range(total_threads):  # this defines how many clients can connect
-                    thread = threading.Thread(target=worker_routine, args=(connection_url[i], context, i, r, self.server_cut_layer_list[i]))
+                    thread = threading.Thread(target=worker_routine, args=(connection_url[i], context, i+1, r, self.server_cut_layer_list[i]))
                     thrs.append(thread)
                     thread.start()
 
                 for thread in thrs:         ##have to check when it will run all epochs..
                     thread.join()
 
-                print("Length of server weights:- ", len(server_weights))
-                print("Length of dataset:- ", len(datasetsize_server))
+                print("Length of server weights:", len(server_weights))
+                print("Length of dataset:", len(datasetsize_server))
 
 
                 # Server models weighted averaging..
