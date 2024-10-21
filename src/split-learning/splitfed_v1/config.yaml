@@ -1,5 +1,6 @@
-logging: false
-log_steps: 50
+logging: true
+# train length
+log_steps: 65
 #cpu OR gpu
 device: cpu
 client_total: 2

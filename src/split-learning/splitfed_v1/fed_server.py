@@ -40,7 +40,8 @@ class Runner:
 
         if (self.config["logging"]):
             # Create and configure logger
-            logging.basicConfig(filename="./fed_server_" + str(client_total) + "_" + str(fed_port) + "_" + str(rnd) + ".log",
+            logging.basicConfig(filename="./fed_server_" + str(client_total) + "_" + 
+                                str(fed_port) + "_" + str(rnd) + ".log",
                                 format='%(asctime)s %(message)s',
                                 filemode='a')
             # Creating an object
@@ -70,6 +71,25 @@ class Runner:
             return w_avg
 
 
+        # Binding socket with retry to overcome "address in use" error
+        # Binding happens only after the address is already not in use 
+        def socket_bind_retry(socket, url, max_retries=10, delay=5):
+            retries = 0
+            while retries < max_retries:
+                try:
+                    socket.bind(url)
+                    print(f"Success bounding to {url}")
+                    return True
+                except zmq.ZMQError as e:
+                    if e.errno == zmq.EADDRINUSE:
+                        retries += 1
+                        print(f"Address {url} in use. Retrying... ({retries}/{max_retries})")
+                        logging.info(f"Address {url} in use. Retrying... ({retries}/{max_retries})")
+                        time.sleep(delay)
+                    else:
+                        raise e
+            return False
+
 
         def get_weights(url, context, thread_no):
             """ Worker routine """
@@ -84,7 +104,11 @@ class Runner:
 
             # socket.connect(worker_url)
             # socket.connect("tcp://*:5555")
-            socket.bind(url)
+            
+            # Binding socket with retry to overcome "address in use" error
+            if not socket_bind_retry(socket, url):
+                print(f"Failed binding to {url}.")
+                return
 
             ##*****************************************************************************************************************
 
@@ -125,7 +149,12 @@ class Runner:
 
             # socket.connect(worker_url)
             # socket.connect("tcp://*:5555")
-            socket.bind(url)
+            
+            # Binding socket with retry to overcome "address in use" error
+            # socket.bind(url)
+            if not socket_bind_retry(socket, url):
+                print(f"Failed binding to {url}.")
+                return
 
             ##*****************************************************************************************************************
 
@@ -137,7 +166,7 @@ class Runner:
             global_bytes_weights = convert.ordered_dict_to_bytes(client_global_weights)
             print("Size of global model weights (after) in bytes is:",
                   getsizeof(global_bytes_weights))
-            # time.sleep(10)
+            
             socket.send(global_bytes_weights)
             print("Weights send to client {}".format(thread_no))
 
