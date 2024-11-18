@@ -93,7 +93,7 @@ class Cl_Custom_Avg(nn.Module):
                 flag = False
 
                 for i in range(0, len(model_list)):
-                    print("cut_layer_list1" + str(i) + ":" + str(cut_layer_list[i]))
+                    print("cut_layer_list1" + str(i+1) + ":" + str(cut_layer_list[i]))
                     if(cut_layer_list[i] >= l):
                         # print("INSIDE IF>>>")
 
@@ -165,7 +165,7 @@ class Serv_Custom_Avg(nn.Module):
                 flag = False
 
                 for i in range(0, len(model_list)):
-                    print("cut_layer_list" + str(i) + ":" + str(cut_layer_list[i]))
+                    print("cut_layer_list" + str(i+1) + ":" + str(cut_layer_list[i]))
                     if(atoi(cut_layer_list[i]) < l):
                         # print("INSIDE IF>>>")
 

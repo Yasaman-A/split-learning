@@ -8,6 +8,7 @@ import torchvision.transforms as transforms
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import models
+from torchvision.models import ResNet18_Weights
 import torch.optim as optim
 from torch.autograd import Variable
 import time
@@ -41,7 +42,10 @@ class Runner:
 
         if (self.config["logging"]):
             # Create and configure logger
-            logging.basicConfig(filename="./sf_server_" + str(client_total) + "_" + str(split_port) + "_" + device + "_" + cut_layer + "_" + epochs + "_" + rnd + ".log",
+            logging.basicConfig(filename="./sf_server_" + str(client_total) + "_" + 
+                                str(split_port) + "_" + str(device) + "_" + 
+                                str(cut_layer) + "_" + str(epochs) + "_" + 
+                                str(rnd) + ".log",
                                 format='%(asctime)s %(message)s',
                                 filemode='a')
             # Creating an object
@@ -50,7 +54,7 @@ class Runner:
             logger.setLevel(logging.INFO)
             logging.info('Parameters (SF_SERVER_LOG) ---------- [TOTAL_CLIENTS --> {}, STARTING_SERVER_PORT --> {}, DEVICE_TYPE --> {}, CUT_LAYER --> {}, EPOCHS --> {}, ROUNDS --> {}] ---------- '.format(str(client_total), str(split_port), device, str(cut_layer), str(epochs), str(rnd)))
 
-        def average_weights(self, w, datasize):
+        def average_weights(w, datasize):
             """
             Returns the average of the weights.
             """
@@ -97,6 +101,9 @@ class Runner:
             # # logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
             # logging.info('Code started..')
 
+            # Fixing UnboundLocalError to ensure that device is always initialized
+            device = self.config["device"]
+            
             if(self.config["device"] != 'cpu'):
                 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -108,7 +115,10 @@ class Runner:
                     self.logits = config["logits"]
                     self.cut_layer = config["cut_layer"]
 
-                    self.model = models.resnet18(pretrained=True)
+                    # self.model = models.resnet18(pretrained=True)
+                    # Newer version of (pretrained=True)
+                    self.model = models.resnet18(weights=ResNet18_Weights.DEFAULT)
+                    
                     num_ftrs = self.model.fc.in_features
                     # Explain this part
                     self.model.fc = nn.Sequential(nn.Flatten(),
@@ -266,15 +276,15 @@ class Runner:
 
                 # Launch pool of worker threads
                 for i in range(total_threads):  # this defines how many clients can connect
-                    thread = threading.Thread(target=worker_routine, args=(connection_url[i], context, i, r))
+                    thread = threading.Thread(target=worker_routine, args=(connection_url[i], context, i+1, r))
                     thrs.append(thread)
                     thread.start()
 
                 for thread in thrs:         ##have to check when it will run all epochs..
                     thread.join()
 
-                print("Length of server weights:- ", len(server_weights))
-                print("Length of dataset:- ", len(datasetsize_server))
+                print("Length of server weights:", len(server_weights))
+                print("Length of dataset:", len(datasetsize_server))
 
 
                 # Server models weighted averaging..

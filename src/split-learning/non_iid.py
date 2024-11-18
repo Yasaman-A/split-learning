@@ -103,6 +103,8 @@ def split_image_data_realwd(data, labels, n_clients=100, verbose=True):
 
     #### constants ####
     n_classes = len(set(labels))
+    # define n_labels to eliminate error (n_labels is not defined) in np.arange(n_labels).reshape(-1, 1), axis=1)
+    n_labels = n_classes  
     classes = list(range(n_classes))
     np.random.shuffle(classes)
     label_indcs = [list(np.where(labels == class_)[0]) for class_ in classes]
@@ -193,7 +195,8 @@ def split_image_data(data, labels, n_clients=100, classes_per_client=10, shuffle
     # sort for labels
     data_idcs = [[] for i in range(n_labels)]
     for j, label in enumerate(labels):
-        data_idcs[label] += [j]
+        # data_idcs[label] += [j]
+        data_idcs[label].append(j)
     if shuffle:
         for idcs in data_idcs:
             np.random.shuffle(idcs)
@@ -215,7 +218,13 @@ def split_image_data(data, labels, n_clients=100, classes_per_client=10, shuffle
                 budget -= take
                 c = (c + 1) % n_labels
             
-            clients_split += [(data[client_idcs], labels[client_idcs])]
+            # clients_split += [(data[client_idcs], labels[client_idcs])]
+            
+            if client_idcs:
+                clients_split.append([data[client_idcs], labels[client_idcs]])
+            else:
+                # adding a valid split
+                clients_split.append([np.empty((0,) + data.shape[1:], dtype=data.dtype), np.empty(0, dtype=labels.dtype)])
 
     def print_split(clients_split): 
         print("Data split:")
@@ -227,7 +236,7 @@ def split_image_data(data, labels, n_clients=100, classes_per_client=10, shuffle
     if verbose:
       print_split(clients_split)
   
-    clients_split = np.array(clients_split)
+    # clients_split = np.array(clients_split)
     
     return clients_split
 

@@ -10,6 +10,7 @@ import torchvision.transforms as transforms
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import models
+from torchvision.models import ResNet18_Weights
 import torch.optim as optim
 from torch.autograd import Variable
 import time
@@ -128,7 +129,9 @@ class Runner:
                 self.cut_layer = cut_layer
 
                 # Explain this line
-                self.model = models.resnet18(pretrained=True)
+                # self.model = models.resnet18(pretrained=True)
+                # Newer version of (pretrained=True)
+                self.model = models.resnet18(weights=ResNet18_Weights.DEFAULT)
 
                 self.model = nn.ModuleList(self.model.children())
                 self.model = nn.Sequential(*self.model)
@@ -298,9 +301,9 @@ class Runner:
 
             weights = client_model.state_dict()
             # print(type(weights))
-            print("Size of model weights (before) in bytes is:-", getsizeof(weights))
+            print("Size of model weights (before) in bytes is:", getsizeof(weights))
             bytes_weights = convert.ordered_dict_to_bytes(weights)
-            print("Size of model weights (after) in bytes is:-",
+            print("Size of model weights (after) in bytes is:",
                   getsizeof(bytes_weights))
             # time.sleep(10)
             socket1.send(bytes_weights)
@@ -350,9 +353,9 @@ class Runner:
 
             global_weights = socket2.recv()
             print("Global weights recieved from fedServer")
-            print("SIze of global model weights (before) in bytes is:-", getsizeof(global_weights))
+            print("Size of global model weights (before) in bytes is:", getsizeof(global_weights))
             global_numpy_weights = convert.bytes_to_dict(global_weights)
-            print("SIze of global model weights (after) in bytes is:-", getsizeof(global_numpy_weights))
+            print("Size of global model weights (after) in bytes is:", getsizeof(global_numpy_weights))
 
             socket2.close()
             context2.term()

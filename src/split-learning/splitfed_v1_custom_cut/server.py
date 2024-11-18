@@ -23,6 +23,7 @@ import torchvision.transforms as transforms
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import models
+from torchvision.models import ResNet18_Weights
 import torch.optim as optim
 from torch.autograd import Variable
 import time
@@ -135,7 +136,10 @@ class Runner:
                     self.logits = config["logits"]
                     self.cut_layer = atoi(cut_layer)
 
-                    self.model = models.resnet18(pretrained=True)
+                    # self.model = models.resnet18(pretrained=True)
+                    # Newer version of (pretrained=True)
+                    self.model = models.resnet18(weights=ResNet18_Weights.DEFAULT)
+
                     num_ftrs = self.model.fc.in_features
                     # Explain this part
                     self.model.fc = nn.Sequential(nn.Flatten(),
@@ -301,15 +305,15 @@ class Runner:
 
                 # Launch pool of worker threads
                 for i in range(total_threads):  # this defines how many clients can connect
-                    thread = threading.Thread(target=worker_routine, args=(connection_url[i], context, i, r, self.server_cut_layer_list[i]))
+                    thread = threading.Thread(target=worker_routine, args=(connection_url[i], context, i+1, r, self.server_cut_layer_list[i]))
                     thrs.append(thread)
                     thread.start()
 
                 for thread in thrs:         ##have to check when it will run all epochs..
                     thread.join()
 
-                print("Length of server weights:- ", len(server_weights))
-                print("Length of dataset:- ", len(datasetsize_server))
+                print("Length of server weights:", len(server_weights))
+                print("Length of dataset:", len(datasetsize_server))
 
 
                 # Server models weighted averaging..
