@@ -423,7 +423,7 @@ class Runner:
             
             # Trying to solve KeyError: 'split_server'
             # url = config["split_server"]["server_ip"] + ":"+ fed_port
-            url = self.config["split_server"]["server_ip"] + ":" + str(fed_port)
+            url = self.config["fed_server"]["server_ip"] + ":" + str(fed_port)
 
             socket2.connect(url)
             # socket.connect("tcp://35.237.244.119:5555")
