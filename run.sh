@@ -106,26 +106,56 @@ function run_client() {
 #===========================
 # Automatic
 #===========================
-function automatic() {
-    #TODO: Choose file.
-    #Make loop for number of runs (dialog? (Probably not))
-    #
-    
-    OPTIONS=(1 "Automatic (file driven)"
-         2 "Manual (user driven)"
-         3 "Configure Setup Variables")
-    
-    
-    CHOICE=$(dialog --clear \
-                    --backtitle "$BACKTITLE - Manual" \
-                    --title "" \
-                    --menu "Choose one of the following operating modes" \
-                    $HEIGHT $WIDTH $CHOICE_HEIGHT \
-                    "${OPTIONS[@]}" \
-                    2>&1 >$TERMINAL)
 
-    clear
-    #case choice in 
+
+#run auto
+# 1 = filepath to file containing run hyperparameters
+function run_auto() {
+    currRun=0
+
+    output_dir="/$HOME/auto_experiments/$time/"
+
+
+    #TODO: Add progress bar of some sort?
+    while IFS= read -r line
+    do
+        run_params=($line)
+        
+        update_hyperparameters "${run_params[@]}"
+
+        run_client "$output_dir" "$currRun" 
+        
+        ((currRun++))
+
+    done < "$1"
+
+}
+
+
+#Automatic()
+#no inputs
+function automatic() {
+    
+    dialog --title "Pick automation file" --fselect "$HOME/" $HEIGHT $WIDTH
+    result=$?
+    
+    if [ "$result" -eq 1 ]; then
+        dialog --infobox "Cancelled File Selection" 10 30
+        sleep 1
+        main_menu
+    elif [ "$result" -eq 0 ]; then
+        dialog --infobox "No file selected" 10 30
+        sleep 1
+        main_menu
+    else
+        dialog --infobox "Running from file $result!" 10 30
+        sleep 1
+
+        clear
+
+        run_auto "$result"
+        fi
+
 }
 
 
@@ -189,7 +219,7 @@ function manual_input() {
 function manual() {
 
     
-    output_dir = "$/HOME/manual_experiments/$time/$"
+    output_dir="$/HOME/manual_experiments/$time/"
 
     clear 
 
@@ -251,7 +281,7 @@ function modify_config() {
              "Output File" 6 1 "$output" 6 20 30 0)
     
     CHOICE=$(dialog --clear \
-                    --backtitle "$BACKTITLE - Automatic" \
+                    --backtitle "$BACKTITLE - Configuration" \
                     --title "" \
                     --form "Configuration" \
                     $HEIGHT $WIDTH 0 \
