@@ -24,17 +24,16 @@ function collect_data() {
 # 6 = fed port
 # 7 = output_file -> data file used by data server
 function change_setup_config() {
-
-    yq eval ".client_total: = $2" -i "$1"
+    clear
+    yq -yi ".client_total = $2" "$1"
+    yq -yi ".split_server.server_ip = \"tcp://$3\"" "$1"
+    yq -yi ".split_server.server_start_port = $4" "$1"
     
-    yq eval ".split_server.server_ip: = \"tcp://$3\"" -i "$1"
-    yq eval ".split_server.server_start_port: = $4" -i "$1"
-    
-    yq eval ".fed_server.server_ip: = \"tcp://$5\"" -i "$1"
-    yq eval ".fed_server.server_start_port: = $6" -i "$1"
+    yq -yi ".fed_server.server_ip = \"tcp://$5\"" "$1"
+    yq -yi ".fed_server.server_start_port = $6" "$1"
 
-    yq eval ".data_server.server_address: = \"http://$3:8000\"" -i "$1" #keep data server on split-server
-    yq eval ".data_server.output_file: = $7" -i "$1"
+    yq -yi ".data_server.server_address = \"http://$3:8000\"" "$1" #keep data server on split-server
+    yq -yi ".data_server.output_file = $7" "$1"
 
 }
 
@@ -48,10 +47,10 @@ function update_hyperparameters() {
 
  #src/split-learning/splitfed_v1/config
 
-    yq eval ".cut_layer: = $2" -i "$1"
-    yq eval ".epoch: = $3" -i "$1"
-    yq eval ".round: = $4" -i "$1"
-    yq eval ".split_type: = $5" -i "$1"
+    yq -yi ".cut_layer: = $2" "$1"
+    yq -yi ".epoch: = $3" "$1"
+    yq -yi ".round: = $4" "$1"
+    yq -yi ".split_type: = $5" "$1"
 }
 
 
@@ -192,11 +191,11 @@ function manual_input() {
             "${OPTIONS[@]}" \
             2>&1 > $TERMINAL)
     
-    if [ $? -eq 0]; then
-        cut_layer=$(echo "result" | sed -n '1p')
-        epoch=$(echo "result" | sed -n '2p')
-        round=$(echo "result" | sed -n '3p')
-        split_type=$(echo "result" | sed -n '4p')
+    if [ $? -eq 0 ]; then
+        cut_layer=$(echo "$CHOICE" | sed -n '1p')
+        epoch=$(echo "$CHOICE" | sed -n '2p')
+        round=$(echo "$CHOICE" | sed -n '3p')
+        split_type=$(echo "$CHOICE" | sed -n '4p')
 
         update_hyperparameters "$1" "$cut_layer" "$epoch" "$round" "$split_type"
         dialog --infobox "Successfully updated hyperparameters" 10 30
@@ -288,16 +287,14 @@ function modify_config() {
                     "${OPTIONS[@]}" \
                     2>&1 >$TERMINAL)
 
-    if [ $? -eq 0]; then
-        num_clients=$(echo "result" | sed -n '1p')
-        split_ip=$(echo "result" | sed -n '2p')
-        split_port=$(echo "result" | sed -n '3p')
-        fed_ip=$(echo "result" | sed -n '4p')
-        fed_port=$(echo "result" | sed -n '5p')
-        output=$(echo "result" | sed -n '6p')
-
-
-
+    if [ $? -eq 0 ]; then
+        num_clients=$(echo "$CHOICE" | sed -n '1p')
+        split_ip=$(echo "$CHOICE" | sed -n '2p')
+        split_port=$(echo "$CHOICE" | sed -n '3p')
+        fed_ip=$(echo "$CHOICE" | sed -n '4p')
+        fed_port=$(echo "$CHOICE" | sed -n '5p')
+        output=$(echo "$CHOICE" | sed -n '6p')
+        
         change_setup_config "$1" "$num_clients" "$split_ip" "$split_port" "$fed_ip" "$fed_port" "$output"
 
         dialog --infobox "Config successfully updated." 10 30
@@ -305,6 +302,10 @@ function modify_config() {
     else
         dialog --infobox "Aborted changes to config" 10 30
         sleep 2
+
+
+
+
     fi
     
     clear
