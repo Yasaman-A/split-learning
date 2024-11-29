@@ -47,10 +47,10 @@ function update_hyperparameters() {
 
  #src/split-learning/splitfed_v1/config
 
-    yq -yi ".cut_layer: = $2" "$1"
-    yq -yi ".epoch: = $3" "$1"
-    yq -yi ".round: = $4" "$1"
-    yq -yi ".split_type: = $5" "$1"
+    yq -yi ".cut_layer = $2" "$1"
+    yq -yi ".epoch = $3" "$1"
+    yq -yi ".round = $4" "$1"
+    yq -yi ".split_type = $5" "$1"
 }
 
 
@@ -200,6 +200,8 @@ function manual_input() {
         update_hyperparameters "$1" "$cut_layer" "$epoch" "$round" "$split_type"
         dialog --infobox "Successfully updated hyperparameters" 10 30
         sleep 2
+
+        clear
 
         run_client "$output_dir" "0"
 
