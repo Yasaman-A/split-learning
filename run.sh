@@ -45,12 +45,11 @@ function change_setup_config() {
 # 5 = split_type
 function update_hyperparameters() {
 
- #src/split-learning/splitfed_v1/config
-
     yq -yi ".cut_layer = $2" "$1"
     yq -yi ".epoch = $3" "$1"
     yq -yi ".round = $4" "$1"
-    yq -yi ".split_type = $5" "$1"
+    yq -yi ".split_type = \"$5\"" "$1"
+
 }
 
 
@@ -109,6 +108,7 @@ function run_client() {
 
 #run auto
 # 1 = filepath to file containing run hyperparameters
+# 2 = parameter file
 function run_auto() {
     currRun=0
 
@@ -119,40 +119,38 @@ function run_auto() {
     while IFS= read -r line
     do
         run_params=($line)
-        
-        update_hyperparameters "${run_params[@]}"
+
+        update_hyperparameters "$1" "${run_params[@]}"
 
         run_client "$output_dir" "$currRun" 
         
         ((currRun++))
 
-    done < "$1"
+    done < "$2"
 
 }
 
 
 #Automatic()
-#no inputs
+# 1 = input config dir
 function automatic() {
     
-    dialog --title "Pick automation file" --fselect "$HOME/" $HEIGHT $WIDTH
+    file=$(dialog --title "Pick automation file" --fselect "$HOME/" $HEIGHT $WIDTH 2>&1 >$TERMINAL)
     result=$?
-    
+
     if [ "$result" -eq 1 ]; then
         dialog --infobox "Cancelled File Selection" 10 30
         sleep 1
         main_menu
     elif [ "$result" -eq 0 ]; then
-        dialog --infobox "No file selected" 10 30
-        sleep 1
-        main_menu
-    else
-        dialog --infobox "Running from file $result!" 10 30
+        dialog --infobox "Running from file $file!" 10 30
         sleep 1
 
         clear
 
-        run_auto "$result"
+        run_auto "$1" "$file"
+    else
+        dialog --infobox "Unexpected error! Dialog returned some arbitrary value" 10 30
         fi
 
 }
@@ -220,7 +218,7 @@ function manual_input() {
 function manual() {
 
     
-    output_dir="$/HOME/manual_experiments/$time/"
+    output_dir="/$HOME/manual_experiments/$time/"
 
     clear 
 
