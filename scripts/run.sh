@@ -161,7 +161,7 @@ function automatic() {
     file=$(dialog --title "Pick automation file" --fselect "$HOME/" $HEIGHT $WIDTH 2>&1 >$TERMINAL)
     result=$?
 
-    if [ "$result" -eq 1 ]; then
+    if [ "$result" -eq 1 || "$result" -eq 255 ]; then
         dialog --infobox "Cancelled File Selection" 10 30
         sleep 1
         main_menu
@@ -174,6 +174,8 @@ function automatic() {
         run_auto "$1" "$file" "$2"
     else
         dialog --infobox "Unexpected error! Dialog returned some arbitrary value" 10 30
+        clear
+        main_menu
         fi
 
 }
