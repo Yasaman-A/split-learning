@@ -43,9 +43,13 @@ function change_setup_config() {
 # 3 = epoch
 # 4 = round
 # 5 = split_type
+# 6 = custom_cut_mode
+
 function update_hyperparameters() {
 
-    yq -yi ".cut_layer = $2" "$1"
+    if [[ $6 == "false" ]]; then
+        yq -yi ".cut_layer = $2" "$1"
+    fi    
     yq -yi ".epoch = $3" "$1"
     yq -yi ".round = $4" "$1"
     yq -yi ".split_type = \"$5\"" "$1"
@@ -56,6 +60,7 @@ function update_hyperparameters() {
 #run_client
 #inputs: $1 = output directory
 #        $2 = current iteration
+#        $3 = custom split information
 function run_client() {
     
     cd /$HOME/split-learning
@@ -70,14 +75,21 @@ function run_client() {
         trap "kill $server_pid" EXIT
         
         collect_data "$1" "$2"
-        python3 -m src.split-learning --mode splitfed_v1 --server
+        
+        if [[ "$3" == "" ]]; then
+            python3 -m src.split-learning --mode splitfed_v1 --server
+        else
+            python3 -m src.split-learning --mode splitfed_v1_custom_cut --server --extra $3
+        fi
 
         kill $server_pid
 
     elif [[ "$device" == "fed-server" ]]; then
         echo "Starting the fed server."
         collect_data "$1" "$2"
+    
         python3 -m src.split-learning --mode splitfed_v1 --fed
+        
 
     elif [[ "$device" =~ ^client-[0-9]+ ]]; then
         sleep 3 #give the split-server enough time to start up
@@ -86,7 +98,14 @@ function run_client() {
         client_num="${client_num:-0}"
         echo "Starting client-$client_num";
         collect_data "$1" "$2" 
-        python3 -m src.split-learning --mode splitfed_v1 --client $client_num
+        
+        if [[ "$3" != *','* ]]; then
+            python3 -m src.split-learning --mode splitfed_v1 --client $client_num
+        else
+            IFS=',' read -r -a split_points <<< "$3"
+            split_point=${split_points[$client_num - 1]}
+            python3 -m src.split-learning --mode splitfed_v1_custom_cut --client $client_num --extra $split_point
+        fi
     else
         echo "Invalid device configuration. Did you set up the instance correctly?"
         echo "Device name: $device"
@@ -111,6 +130,7 @@ function run_client() {
 #run auto
 # 1 = filepath to file containing run hyperparameters
 # 2 = parameter file
+# 3 = custom_cut_mode
 function run_auto() {
     currRun=0
 
@@ -122,9 +142,9 @@ function run_auto() {
     do
         run_params=($line)
 
-        update_hyperparameters "$1" "${run_params[@]}"
+        update_hyperparameters "$1" "${run_params[@]}" "$3"
 
-        run_client "$output_dir" "$currRun" 
+        run_client "$output_dir" "$currRun" "$run_params[0]"
         
         ((currRun++))
 
@@ -135,6 +155,7 @@ function run_auto() {
 
 #Automatic()
 # 1 = input config dir
+# 2 = custom_cut_mode
 function automatic() {
     
     file=$(dialog --title "Pick automation file" --fselect "$HOME/" $HEIGHT $WIDTH 2>&1 >$TERMINAL)
@@ -150,7 +171,7 @@ function automatic() {
 
         clear
 
-        run_auto "$1" "$file"
+        run_auto "$1" "$file" "$2"
     else
         dialog --infobox "Unexpected error! Dialog returned some arbitrary value" 10 30
         fi
@@ -163,11 +184,16 @@ function automatic() {
 # Manual mode
 #===========================
 # $1 = config
+# $2 = custom_cut_mode
 
 function manual_input() {
 
-    echo "0" | dialog --no-clear --gauge "Getting Config Values" 15 50 0
-    cut_layer=$(yq '.cut_layer' "$1")
+    if [[ $2 == false ]]; then
+        echo "0" | dialog --no-clear --gauge "Getting Config Values" 15 50 0
+        cut_layer=$(yq '.cut_layer' "$1")
+    else
+        cut_layer="X,X,X"
+    fi
     
     echo "25" | dialog --no-clear --gauge "Getting Config Values" 15 50 25
     epoch=$(yq '.epoch' "$1")
@@ -176,7 +202,7 @@ function manual_input() {
     round=$(yq '.round' "$1")
 
     echo "75" | dialog --no-clear --gauge "Getting Config Values" 15 50 25
-    split_type=$(yq '.split_type' "$1")
+    split_type=$(yq '.split_type' "$1" | sed 's/^"\|"$//g')
 
     OPTIONS=("Cut Layer:" 1 1 "$cut_layer" 1 20 30 0
              "Epochs:" 2 1 "$epoch" 2 20 30 0
@@ -197,26 +223,25 @@ function manual_input() {
         round=$(echo "$CHOICE" | sed -n '3p')
         split_type=$(echo "$CHOICE" | sed -n '4p')
 
-        update_hyperparameters "$1" "$cut_layer" "$epoch" "$round" "$split_type"
+        update_hyperparameters "$1" "$cut_layer" "$epoch" "$round" "$split_type" $2
         dialog --infobox "Successfully updated hyperparameters" 10 30
         sleep 2
 
         clear
 
-        run_client "$output_dir" "0"
+        run_client "$output_dir" "0" "$cut_layer"
 
     else
         dialog --infobox "Aborted changes to hyperparameters" 10 30
         sleep 2
-        manual "$1"
+        manual "$1" $2
     fi
 
 }
 
 
-
-
 # $1 = config
+# $2 = custom_cut_mode
 function manual() {
 
     
@@ -238,13 +263,31 @@ function manual() {
 
     case $CHOICE in 
         1) clear 
-            run_client "$output_dir" "0"
-            sleep 30
+            if [[ $2 == "true" ]]; then
+
+                cut_layer=$(dialog --title "Cut Layer?" \
+                       --inputbox "Enter All cut layers separated by commas e.g. 3,5,6" \
+                       $HEIGHT $WIDTH $CHOICE_HEIGHT \
+                       2>&1 >$TERMINAL)
+
+                option=$?
+
+                if [[ $option > 0 ]]; then
+                    manual "$1" $2
+                    exit
+                fi
+            
+            else
+                cut_layer=""
+            fi
+            
+            clear
+            run_client "$output_dir" "0" "$cut_layer"
             ;;
-        2) manual_input "$1"
+        2) manual_input "$1" $2
             ;;
         *) clear
-           main_menu
+           main_menu "$1" $2
             ;;
     esac
 
@@ -254,6 +297,10 @@ function manual() {
 #===========================
 # Modify config
 #===========================
+#
+# 1 = config path
+# 2 = custom_cut_mode
+#
 function modify_config() {
     
     echo "0" | dialog --no-clear --gauge "Getting Config Values" 15 50 0
@@ -304,15 +351,11 @@ function modify_config() {
     else
         dialog --infobox "Aborted changes to config" 10 30
         sleep 2
-
-
-
-
     fi
     
     clear
 
-    main_menu
+    main_menu "$1" $2
 
     #case choice in 
 }
@@ -322,6 +365,11 @@ HEIGHT=15
 WIDTH=50
 CHOICE_HEIGHT=4
 
+
+
+#main_menu
+# 1 = config path
+# 2 = custom_cut_mode
 function main_menu() {
 
     BACKTITLE="Split Learning Executor"
@@ -343,20 +391,49 @@ function main_menu() {
 
     case $CHOICE in 
         1)
-            automatic "$CONFIG"
+            automatic "$1" $2
             ;;
         2)
-            manual "$CONFIG"
+            manual "$1" $2
             ;;
         3)
-            modify_config "$CONFIG"
+            modify_config "$1" $2
+            ;;
+        *)
+            home
             ;;
     esac
-
-
 }
+
+function home() {
+    
+    OPTIONS=(1 "SplitFedV1"
+            2 "SplitFedV1 with Custom Cut")
+
+    CHOICE=$(dialog --clear \
+                    --backtitle "$BACKTITLE" \
+                    --title "Operating mode" \
+                    --menu "Choose one of the following operating modes" \
+                    $HEIGHT $WIDTH $CHOICE_HEIGHT \
+                    "${OPTIONS[@]}" \
+                    2>&1 >$TERMINAL)
+
+    clear
+
+    case $CHOICE in 
+        1)
+            CONFIG="/$HOME/split-learning/src/split-learning/splitfed_v1/config.yaml"
+            main_menu "$CONFIG" false
+            ;;
+        2)
+            CONFIG="/$HOME/split-learning/src/split-learning/splitfed_v1_custom_cut/config.yaml"
+            main_menu "$CONFIG" true
+            ;;
+    esac
+}
+
 
 
 trap clear SIGINT
 
-main_menu
+home
