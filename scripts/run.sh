@@ -144,7 +144,7 @@ function run_auto() {
 
         update_hyperparameters "$1" "${run_params[@]}" "$3"
 
-        run_client "$output_dir" "$currRun" "$run_params[0]"
+        run_client "$output_dir" "$currRun" "{$run_params[0]}"
         
         ((currRun++))
 
