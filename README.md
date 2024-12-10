@@ -77,6 +77,35 @@ Running non-iid.py results in *output.pickle* file. This pickle file should be p
 - **app.py** The src/split-learning/app.py file is the file that runs the other codes. 
 
 
+## Scripts
+- **run.sh**: A bash script that automates the running of multiple experiments based on an input file. Allows for running multiple passes of either SplitFedV1 or SplitFedV1_Custom_Cut. Automatically enables the python environment and data server.
+
+For automatic running, the input file should be formatted as follows:
+cut_layer epochs rounds split_type.
+
+e.g.
+`5, 5, 10, "s"`
+
+If you are using custom cut, separate all the client split layers by commas.
+e.g.
+`3,5 5 10 "s"`
+
+Each new line dictates a new experiment.
+
+Based on running mode, output is saved in a timestamped directory to either `/$HOME/manual_experiments/` or `/$HOME/auto_experiments/.` 
+
+
+Assumptions:
+- The repo is found in /$HOME/.
+- Data server is hosted on the split server.
+- Read/Write permissions.
+
+Dependencies:
+- dialog
+- yq
+- collectl
+- sysstat
+
 
 ## References
 <a id="1">[1]</a> 
