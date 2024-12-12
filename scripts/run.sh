@@ -88,9 +88,13 @@ function run_client() {
         echo "Starting the fed server."
         collect_data "$1" "$2"
     
-        python3 -m src.split-learning --mode splitfed_v1 --fed
-        
+        if [[ "$3" == "" ]]; then
+            python3 -m src.split-learning --mode splitfed_v1 --fed
+        else
+            python3 -m src.split-learning --mode splitfed_v1_custom_cut --fed
+        fi
 
+    
     elif [[ "$device" =~ ^client-[0-9]+ ]]; then
         sleep 3 #give the split-server enough time to start up
         client_num="${device##*-}"
@@ -104,6 +108,7 @@ function run_client() {
         else
             IFS=',' read -r -a split_points <<< "$3"
             split_point=${split_points[$client_num - 1]}
+            echo "Split point set to $split_point"
             python3 -m src.split-learning --mode splitfed_v1_custom_cut --client $client_num --extra $split_point
         fi
     else
