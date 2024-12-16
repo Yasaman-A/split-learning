@@ -62,7 +62,7 @@ class Runner:
 
         if (self.config["logging"]):
             # Create and configure logger
-            logging.basicConfig(filename="./cc_sf_server_" + str(client_total) + "_" + str(split_port) + "_" + device +  "_" + epochs + "_" + rnd + ".log",
+            logging.basicConfig(filename="./cc_sf_server_" + str(client_total) + "_" + str(split_port) + "_" + device +  "_" + str(epochs) + "_" + str(rnd) + ".log",
                                 format='%(asctime)s %(message)s',
                                 filemode='a')
             # Creating an object

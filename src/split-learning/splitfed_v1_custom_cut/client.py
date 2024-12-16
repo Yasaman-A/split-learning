@@ -51,7 +51,7 @@ class Runner:
 
         if (self.config["logging"]):
             # Create and configure logger
-            logging.basicConfig(filename= str(self.client_id) + "_" + str(cut_layer) + "_" + str(self.config["epoch"]) + "_" + str(self.config["rnd"]) + "_" + str(self.config["batch_size"])+ "_" + self.config["device"]+".log",
+            logging.basicConfig(filename= str(self.client_id) + "_" + str(cut_layer) + "_" + str(self.config["epoch"]) + "_" + str(self.config["round"]) + "_" + str(self.config["batch_size"])+ "_" + self.config["device"]+".log",
                                 format='%(asctime)s %(message)s',
                                 filemode='a')
             # Creating an object

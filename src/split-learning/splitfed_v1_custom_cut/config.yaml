@@ -1,4 +1,4 @@
-logging: false
+logging: true
 log_steps: 50
 #cpu OR gpu
 device: cpu
