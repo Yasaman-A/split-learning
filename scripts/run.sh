@@ -3,6 +3,25 @@
 device=$(hostname)
 time=$(date +%F_%H_%M_%S)
 TERMINAL=$(tty)
+
+#global array to keep track of logging processes.
+loggers=()
+
+
+
+
+
+#terminate_loggers
+#kills all logging functions of that round. Pevents logging beyond scope of runs.
+function terminate_loggers(){
+    for pid in "${loggers[@]}"; do
+        kill $pid
+    done
+    loggers=()
+}
+
+
+
 #collect_data()
 #inputs:
 # $1 -> output directory.
@@ -12,8 +31,11 @@ function collect_data() {
     mkdir -p "$1$2" || { echo "Failed to create directory"; exit 1; }
 
     collectl -oT -sCj > "$1$2/cpu.txt"&
+    loggers+=($!)
     collectl -oT -sM > "$1$2/mem.txt"&
+    loggers+=($!)
     sar -n DEV --iface=ens4 1 > "$1$2/net.txt"&
+    loggers+=($!)
 }
 
 # 1 = config
@@ -115,6 +137,7 @@ function run_client() {
         echo "Invalid device configuration. Did you set up the instance correctly?"
         echo "Device name: $device"
     fi
+    terminate_loggers
 
     deactivate
 
