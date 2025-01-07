@@ -98,7 +98,7 @@ function run_client() {
         
         collect_data "$1" "$2"
         
-        if [[ "$3" == "" ]]; then
+        if [[ "$3" != *','* ]]; then
             python3 -m src.split-learning --mode splitfed_v1 --server
         else
             python3 -m src.split-learning --mode splitfed_v1_custom_cut --server --extra $3
@@ -110,7 +110,7 @@ function run_client() {
         echo "Starting the fed server."
         collect_data "$1" "$2"
     
-        if [[ "$3" == "" ]]; then
+        if [[ "$3" != *','* ]]; then
             python3 -m src.split-learning --mode splitfed_v1 --fed
         else
             python3 -m src.split-learning --mode splitfed_v1_custom_cut --fed
@@ -137,6 +137,7 @@ function run_client() {
         echo "Invalid device configuration. Did you set up the instance correctly?"
         echo "Device name: $device"
     fi
+    
     terminate_loggers
 
     deactivate
@@ -403,7 +404,6 @@ CHOICE_HEIGHT=4
 function main_menu() {
 
     BACKTITLE="Split Learning Executor"
-    CONFIG="/$HOME/split-learning/src/split-learning/splitfed_v1/config.yaml"
 
     OPTIONS=(1 "Automatic (file driven)"
             2 "Manual (user driven)"
