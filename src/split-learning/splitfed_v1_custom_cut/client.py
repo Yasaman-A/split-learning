@@ -161,7 +161,8 @@ class Runner:
                 print("GLOBAL_CLIENT_WEIGHTS_LOADED")
                 del global_numpy_weights
 
-
+            self.total_activation_size_round = 0.0
+            self.total_loss_size_round = 0.0
 
             context = zmq.Context()
 
@@ -223,6 +224,10 @@ class Runner:
 
                     # print("inside for for...")
                     bytes_server_inputs = convert.array_to_bytes(server_inputs.cpu())
+
+                    self.total_activation_size_round += len(bytes_server_inputs)
+
+                    
                     server_work_time_start = time.time()
                     socket.send(bytes_server_inputs)
                     # print("data_sent")
@@ -306,6 +311,11 @@ class Runner:
             print("Size of model weights (after) in bytes is:",
                   getsizeof(bytes_weights))
             # time.sleep(10)
+            logging.info('Size of model weights (before) in bytes is: %s', (getsizeof(weights)))
+            logging.info('Size of model weights (after) in bytes is: %s', (getsizeof(bytes_weights)))
+            
+            weights_size = len(bytes_weights)
+            
             socket1.send(bytes_weights)
 
             ## dummy recv
@@ -356,6 +366,29 @@ class Runner:
             print("Size of global model weights (before) in bytes is:", getsizeof(global_weights))
             global_numpy_weights = convert.bytes_to_dict(global_weights)
             print("Size of global model weights (after) in bytes is:", getsizeof(global_numpy_weights))
+                
+            global_weights_size = len(global_weights)
+
+            # At the end of each round, log total data sent and received
+            total_data_sent_round = self.total_activation_size_round + weights_size
+            total_data_received_round = self.total_loss_size_round + global_weights_size
+            total_data_transmitted_round = total_data_sent_round + total_data_received_round
+            
+            print(f"\nTotal data sent in this round: {total_data_sent_round:.2f} bytes")
+            logging.info(f"\nTotal data sent in this round: {total_data_sent_round:.2f} bytes")
+            
+            print(f"Total data received in this round: {total_data_received_round:.2f} bytes")
+            logging.info(f"Total data received in this round: {total_data_received_round:.2f} bytes")
+            
+            print(f"Total data transmitted in this round: {total_data_transmitted_round:.2f} bytes")
+            logging.info(f"Total data transmitted in this round: {total_data_transmitted_round:.2f} bytes")
+            
+            self.total_activation_size_round = 0.0
+            self.total_loss_size_round = 0.0
+
+
+
+
 
             socket2.close()
             context2.term()
