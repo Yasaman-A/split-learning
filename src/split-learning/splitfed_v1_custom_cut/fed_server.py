@@ -150,8 +150,8 @@ class Runner:
             print("Size of global model weights (after) in bytes is:",
                   getsizeof(global_bytes_weights))
             # time.sleep(10)
-            logging.info('Size of global model weights (before) in bytes is:', getsizeof(client_global_weights))
-            logging.info('Size of Size of global model weights (after) in bytes is:', getsizeof(global_bytes_weights))
+            logging.info('Size of global model weights (before) in bytes is: %s', getsizeof(client_global_weights))
+            logging.info('Size of Size of global model weights (after) in bytes is: %s', getsizeof(global_bytes_weights))
 
 
             socket.send(global_bytes_weights)
