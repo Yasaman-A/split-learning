@@ -155,14 +155,21 @@ class Runner:
         training_start_time = time.time()
         num_rounds = rnd
 
+        #Keep track of networking information
+        total_sent_to_split = 0
+        total_received_from_split = 0
+        total_sent_to_fed = 0
+        total_received_from_fed = 0
+
         for r in range(num_rounds):
             if r > 0:
                 client_model.load_state_dict(global_numpy_weights)
                 print("GLOBAL_CLIENT_WEIGHTS_LOADED")
                 del global_numpy_weights
-
-            self.total_activation_size_round = 0.0
-            self.total_loss_size_round = 0.0
+            round_sent_to_split = 0
+            round_received_from_split = 0
+            round_sent_to_fed = 0
+            round_received_from_fed = 0
 
             context = zmq.Context()
 
@@ -179,16 +186,24 @@ class Runner:
             send_iterations = str(iterations).encode()
             socket.send(send_iterations)
 
+            round_sent_to_split += len(send_iterations)
+
             names = socket.recv()
             recv_names = names.decode()
             # print(recv_names)
+
+            round_received_from_split += len(names)
 
             print(datasetsize_used)
             send_dataset_size = str(datasetsize_used).encode()
             socket.send(send_dataset_size)
 
+            round_sent_to_split += len(send_dataset_size)
+
             names = socket.recv()
             recv_names = names.decode()
+
+            round_received_from_split += len(names)
 
             # send_iterations = str(iterations).encode()
             # socket.send(send_iterations)
@@ -213,10 +228,15 @@ class Runner:
                     socket.send(bytes_labels)
                     # print("labels_sent")
 
+                    round_sent_to_split += len(bytes_labels)
+
+
                     ##dummy......
                     names = socket.recv()
                     recv_names = names.decode()
                     # print(recv_names)
+
+                    round_received_from_split += len(names)
 
                     # Client part
                     activations = client_model(inputs)
@@ -225,7 +245,7 @@ class Runner:
                     # print("inside for for...")
                     bytes_server_inputs = convert.array_to_bytes(server_inputs.cpu())
 
-                    self.total_activation_size_round += len(bytes_server_inputs)
+                    round_sent_to_split += len(bytes_server_inputs)
 
                     
                     server_work_time_start = time.time()
@@ -251,6 +271,8 @@ class Runner:
                     loss = torch.from_numpy(numpy_loss)
                     loss = loss.to(device)
                     # print("loss_recieved")
+
+                    round_received_from_split += len(recv_loss)
 
                     # Simulation of Client Happening in this portion
                     # Client optimization
@@ -314,7 +336,7 @@ class Runner:
             logging.info('Size of model weights (before) in bytes is: %s', (getsizeof(weights)))
             logging.info('Size of model weights (after) in bytes is: %s', (getsizeof(bytes_weights)))
             
-            weights_size = len(bytes_weights)
+            round_sent_to_fed += len(bytes_weights)
             
             socket1.send(bytes_weights)
 
@@ -322,21 +344,32 @@ class Runner:
             names = socket1.recv()
             recv_names = names.decode()
 
+            round_received_from_fed += len(names)
+
             ## send dataset size for weighted avg
+            round_sent_to_fed += len(bytes_weights)
+
             socket1.send(send_dataset_size)
 
             ## dummy recv
             names = socket1.recv()
             recv_names = names.decode()
 
+            round_received_from_fed += len(names)
+
             ## send cut layer info
             # cut_layer = int(self.config["cut_layer"])
             send_cut_layer_size = str(cut_layer).encode()
+
+            round_sent_to_fed += len(send_cut_layer_size)
+
             socket1.send(send_cut_layer_size)
 
             ## dummy recv
             names = socket1.recv()
             recv_names = names.decode()
+
+            round_received_from_fed += len(names)
 
             del weights
             del bytes_weights
@@ -359,35 +392,46 @@ class Runner:
 
             msg = "send_global_weights"
             send_msg = msg.encode()
+
+            round_sent_to_fed += len(send_msg)
             socket2.send(send_msg)
 
             global_weights = socket2.recv()
+            round_received_from_fed += len(global_weights)
+            
             print("Global weights recieved from fedServer")
             print("Size of global model weights (before) in bytes is:", getsizeof(global_weights))
+            
             global_numpy_weights = convert.bytes_to_dict(global_weights)
             print("Size of global model weights (after) in bytes is:", getsizeof(global_numpy_weights))
                 
-            global_weights_size = len(global_weights)
+            round_sent_to_servers = round_sent_to_fed + round_sent_to_split
+            round_rcvd_from_servers = round_received_from_fed + round_received_from_split
+            round_total = round_sent_to_servers + round_rcvd_from_servers
 
             # At the end of each round, log total data sent and received
-            total_data_sent_round = self.total_activation_size_round + weights_size
-            total_data_received_round = self.total_loss_size_round + global_weights_size
-            total_data_transmitted_round = total_data_sent_round + total_data_received_round
+            print("======== Round Networking Summary ========")
+            print(f"Data sent to Split Server: {round_sent_to_split} bytes")
+            print(f"Data sent to Fed Server: {round_sent_to_fed} bytes")
+            print(f"Total Sent: {round_sent_to_servers}")
+            print(f"Data received from Split Server: {round_received_from_split} bytes")
+            print(f"Data received from Split Server: {round_received_from_fed} bytes")
+            print(f"Total Received: {round_rcvd_from_servers}")
+            print(f"===== \nTotal Transmitted this Round: {round_total}")
             
-            print(f"\nTotal data sent in this round: {total_data_sent_round:.2f} bytes")
-            logging.info(f"\nTotal data sent in this round: {total_data_sent_round:.2f} bytes")
+            logging.info("======== Round Networking Summary ========")
+            logging.info(f"Data sent to Split Server: {round_sent_to_split} bytes")
+            logging.info(f"Data sent to Fed Server: {round_sent_to_fed} bytes")
+            logging.info(f"Total Sent: {round_sent_to_servers}")
+            logging.info(f"Data received from Split Server: {round_received_from_split} bytes")
+            logging.info(f"Data received from Split Server: {round_received_from_fed} bytes")
+            logging.info(f"Total Received: {round_rcvd_from_servers}")
+            logging.info(f"===== \nTotal Transmitted this Round: {round_total}")
             
-            print(f"Total data received in this round: {total_data_received_round:.2f} bytes")
-            logging.info(f"Total data received in this round: {total_data_received_round:.2f} bytes")
-            
-            print(f"Total data transmitted in this round: {total_data_transmitted_round:.2f} bytes")
-            logging.info(f"Total data transmitted in this round: {total_data_transmitted_round:.2f} bytes")
-            
-            self.total_activation_size_round = 0.0
-            self.total_loss_size_round = 0.0
-
-
-
+            total_sent_to_split += round_sent_to_split
+            total_sent_to_fed += round_sent_to_fed
+            total_received_from_split += round_received_from_split
+            total_received_from_fed += round_received_from_fed
 
 
             socket2.close()
@@ -399,5 +443,33 @@ class Runner:
         training_time = training_end_time - training_start_time
         print("CLIENT_TOTAL_TRAINING_TIME = ", training_time)
         logging.info('CLIENT_TOTAL_TRAINING_TIME = {:.3f}'.format(training_time))
+
+        total_sent_to_servers = total_sent_to_split + total_sent_to_fed
+        total_rcvd_from_servers = total_received_from_split + total_received_from_fed
+        total_data_transmitted = total_sent_to_servers + total_rcvd_from_servers
+
+        print("======== Training Networking Summary ========")
+        print("Sent Data:")
+        print(f"Sent to Split Server: {total_sent_to_split} bytes.")
+        print(f"Sent to Fed Server: {total_sent_to_fed} bytes.")
+        print(f"Combined Total: {total_sent_to_servers} bytes.")
+        print("Received Data:")
+        print(f"Sent to Split Server: {total_received_from_split} bytes.")
+        print(f"Sent to Fed Server: {total_received_from_fed} bytes.")
+        print(f"Combined Total: {total_rcvd_from_servers} bytes.")
+        print("========")
+        print(f"Total Transmitted Data: {total_data_transmitted} bytes.")
+
+        logging.info("======== Training Networking Summary ========")
+        logging.info("Sent Data:")
+        logging.info(f"Sent to Split Server: {total_sent_to_split} bytes.")
+        logging.info(f"Sent to Fed Server: {total_sent_to_fed} bytes.")
+        logging.info(f"Combined Total: {total_sent_to_servers} bytes.")
+        logging.info("Received Data:")
+        logging.info(f"Sent to Split Server: {total_received_from_split} bytes.")
+        logging.info(f"Sent to Fed Server: {total_received_from_fed} bytes.")
+        logging.info(f"Combined Total: {total_rcvd_from_servers} bytes.")
+        logging.info("========")
+        logging.info(f"Total Transmitted Data: {total_data_transmitted} bytes.")
 
 #################################################################################################################################
