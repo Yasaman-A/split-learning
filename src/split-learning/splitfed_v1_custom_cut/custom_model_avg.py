@@ -20,6 +20,11 @@ class ResNet18Client(nn.Module):
         # Explain this line
         self.model = models.resnet18(pretrained=False)
 
+        self.logits = 10
+        num_ftrs = self.model.fc.in_features
+        self.model.fc = nn.Sequential(nn.Flatten(),
+                                            nn.Linear(num_ftrs, self.logits))
+
         self.model = nn.ModuleList(self.model.children())
         self.model = nn.Sequential(*self.model)
 

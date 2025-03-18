@@ -25,6 +25,10 @@ def bytes_to_dict(b: bytes) -> OrderedDict:
     # print("inside conversion...........")
     return pickle.loads(b)
 
+
+def grad_to_bytes(x: np.ndarray) -> bytes:
+    None
+
 # ----------
 # quick test
 

@@ -235,7 +235,23 @@ class Runner:
                     transfer_loss = loss.detach().clone()
                     bytes_loss = convert.array_to_bytes(transfer_loss.cpu())
                     socket.send(bytes_loss)
-                    # print("loss_sent")
+
+                    #dummy
+                    socket.recv()
+
+                    for layer, param in enumerate(server_model.parameters()):   
+                        if param.grad is not None:
+                            grad_numpy = param.grad.detach().cpu().numpy()
+                        else:
+                            grad_numpy = torch.zeros_like(param).cpu().numpy()
+                        
+                        grad_bytes = convert.array_to_bytes(grad_numpy)
+                        socket.send(grad_bytes)
+
+                        #dummy
+                        socket.recv()
+
+                    socket.send(b"ack")
 
                     step_end_time = time.time()
                     total_one_step_time = step_end_time - step_start_time

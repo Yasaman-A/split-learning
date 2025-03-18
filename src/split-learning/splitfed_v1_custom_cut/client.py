@@ -125,7 +125,7 @@ class Runner:
             # Explain initialize (listing the neural network architecture and other related parameters)
             def __init__(self, config):
                 super(ResNet18Client, self).__init__()
-                # Explain this line
+                self.logits = config["logits"]
                 self.cut_layer = cut_layer
 
                 # Explain this line
@@ -133,8 +133,15 @@ class Runner:
                 # Newer version of (pretrained=True)
                 self.model = models.resnet18(weights=ResNet18_Weights.DEFAULT)
 
+                num_ftrs = self.model.fc.in_features
+                self.model.fc = nn.Sequential(nn.Flatten(),
+                                                  nn.Linear(num_ftrs, self.logits))
+
+
                 self.model = nn.ModuleList(self.model.children())
                 self.model = nn.Sequential(*self.model)
+
+
 
             # Explain forward (actually used during the execution of the neural network at runtime)
             def forward(self, x):
@@ -265,14 +272,37 @@ class Runner:
                     # server_optimizer.step()
                     ################################################################################
 
+
+                    #recover loss from server
                     recv_loss = socket.recv()
                     server_work_time_end = time.time()
                     numpy_loss = convert.bytes_to_array(recv_loss)
                     loss = torch.from_numpy(numpy_loss)
                     loss = loss.to(device)
-                    # print("loss_recieved")
+
+                    #dummy
+                    socket.send(b'ack')
+
+                    #recover gradient from server
+                    recv_grads = []
+                    for param in client_model.parameters():
+                        recv_grad = socket.recv()
+                        #dummy
+                        socket.send(b'ack')
+
+                        numpy_grad = convert.bytes_to_array(recv_grad)
+                        t_grad = torch.from_numpy(numpy_grad).to(device)
+                        recv_grads.append(t_grad)
+
+                    #ensure server reply as per ZMQ protocol
+                    socket.recv()
+
+                    for param, t_grad in zip(client_model.parameters(), recv_grads):
+                        param.grad = t_grad
+
 
                     round_received_from_split += len(recv_loss)
+                    round_received_from_split += len(recv_grad)
 
                     # Simulation of Client Happening in this portion
                     # Client optimization
