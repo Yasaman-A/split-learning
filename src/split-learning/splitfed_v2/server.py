@@ -199,12 +199,17 @@ class Runner:
                 def forward(self, x):
                     for i, l in enumerate(self.model):
                         # Explain this part
-                        if i <= self.cut_layer:
+                        if i <= cut_layer:
                             continue
                         x = l(x)
                     return nn.functional.softmax(x, dim=1)
+                
+                def change_cut(self, cut_layer):
+                    self.cut_layer = cut_layer
 
-            config = {"cut_layer": cut_layer, "logits": 10}
+            config = {"cut_layer": 3
+                      #cut_layer
+                      , "logits": 10}
             # client_model = ResNet18Client(config).to(device)
             server_model = ResNet18Server(config).to(device)
 
@@ -220,10 +225,17 @@ class Runner:
             connection_url = ["tcp://*:" +str(port_no+i) for i in range(client_total)]
             # connection_url = ["tcp://*:5555", "tcp://*:5556"]
 
-            num_rounds =rnd
+            num_rounds = rnd
             num_epochs = epochs
 
             context = zmq.Context()
+
+            sockets = []
+
+            for url in connection_url:
+                socket = context.socket(zmq.REP)
+                socket.bind(url)
+                sockets.append(socket)
 
             training_start_time = time.time()
             for r in range(num_rounds):
@@ -231,25 +243,20 @@ class Runner:
 
                 for epoch in range(num_epochs):
                 
-                    random.shuffle(connection_url)
+                    random.shuffle(sockets)
                     # print("NEW_SHUFFLED_CLIENTS_FOR_THIS_EPOCH --> {}".format(connection_url))
                     # logging.info("NEW_SHUFFLED_CLIENTS_FOR_THIS_EPOCH --> {}".format(connection_url))
                     for cl in range(client_total):
                         client_no = cl + 1
-                        # worker_routine(connection_url[cl], context, cl, r)
 
-                        ##################################################
-                        ##################################################
                         """ Worker routine """
+                        #use socket for random client n
+                        socket = sockets[cl]
 
-                        # Socket to talk to dispatcher
-                        # context = zmq.Context()
-                        socket = context.socket(zmq.REP)
-
-                        # socket.connect(worker_url)
-                        # socket.connect("tcp://*:5555")
-                        # socket.bind(url)
-                        socket.bind(connection_url[cl])
+                        cut_layer = int(socket.recv().decode())
+                        print(cut_layer)
+                        server_model.change_cut(cut_layer)
+                        socket.send(b'ack')
 
                         iterations = socket.recv()
                         recv_iterations = int(iterations.decode())
@@ -310,6 +317,24 @@ class Runner:
                             socket.send(bytes_loss)
                             # print("loss_sent")
 
+
+                            #dummy
+                            socket.recv()
+
+                            for layer, param in enumerate(server_model.parameters()):   
+                                if param.grad is not None:
+                                    grad_numpy = param.grad.detach().cpu().numpy()
+                                else:
+                                    grad_numpy = torch.zeros_like(param).cpu().numpy()
+                                
+                                grad_bytes = convert.array_to_bytes(grad_numpy)
+                                socket.send(grad_bytes)
+
+                                #dummy
+                                socket.recv()
+
+                            socket.send(b"ack")
+
                             step_end_time = time.time()
                             total_one_step_time = step_end_time - step_start_time
                             print("***CL - {}***  SERVER_TOTAL_ONE_STEP_TIME = {:.3f}".format(client_no, total_one_step_time))
@@ -333,8 +358,6 @@ class Runner:
 
                         print("Worker done******************************")
 
-                        socket.close()
-
                         ##################################################
                         ##################################################
 
@@ -352,7 +375,7 @@ class Runner:
 
 
             print("All rounds ended..")
-
+            
             context.term()
 
         main()
