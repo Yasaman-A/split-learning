@@ -1,6 +1,7 @@
 """
 arg1 --> CONFIG_FILE_PATH
 arg2 --> CLIENT_ID
+arg3 --> CUT_LAYER
 """
 
 from locale import atoi
@@ -36,6 +37,10 @@ class Runner:
             self.config = yaml.load(yamlfile, Loader=yaml.FullLoader)
             print("Read successful")
 
+    #called by app.py in ../
+    def set_extra_options(self, extra):
+        self.input_cut_layer = atoi(extra)
+
     def run(self):
         split_address = self.config["split_server"]["server_ip"]
         split_port = self.config["split_server"]["server_start_port"]+self.client_id-1
@@ -44,12 +49,12 @@ class Runner:
         num_epochs = int(self.config["epoch"])
         output_file = self.config["data_server"]["output_file"]
         rnd = self.config["round"]
-        self.cut_layer = self.config["cut_layer"]
+        cut_layer = self.input_cut_layer
 
 
         if (self.config["logging"]):
             # Create and configure logger
-            logging.basicConfig(filename= str(self.client_id) + "_" + str(self.config["cut_layer"]) + "_" + str(self.config["epoch"]) + "_" + str(self.config["rnd"]) + "_" + str(self.config["batch_size"])+ "_" + self.config["device"]+".log",
+            logging.basicConfig(filename= str(self.client_id) + "_" + str(cut_layer) + "_" + str(self.config["epoch"]) + "_" + str(self.config["rnd"]) + "_" + str(self.config["batch_size"])+ "_" + self.config["device"]+".log",
                                 format='%(asctime)s %(message)s',
                                 filemode='a')
             # Creating an object
@@ -84,7 +89,6 @@ class Runner:
         elif (self.config["split_type"] == 's'):
             if os.path.exists(output_file+str(self.client_id)):
                 os.remove(output_file+str(self.client_id))
-            # print(self.config["data_server"]["server_address"]+"/"+output_file)
             urllib.request.urlretrieve(self.config["data_server"]["server_address"]+"/"+output_file, output_file+str(self.client_id))
             with open(output_file+str(self.client_id), 'rb') as handle:
                 trainloaders = pickle.load(handle)
@@ -102,33 +106,25 @@ class Runner:
 
             use_indices = list_of_indices[self.client_id]
             datasetsize_used = len(use_indices)
-            # print(use_indices)
 
             trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
                                                       num_workers=2, sampler=use_indices)  # shuffle=True (mutually exclusive with sampler)
-        # print(len(trainloader))
-        # exit()
 
         testset = torchvision.datasets.CIFAR10(root='./data', train=False,
                                                download=True, transform=transform)
         testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
                                                  shuffle=False, num_workers=2)
 
-        # Explain nn.Module and explain the forward and backward pass
 
         class ResNet18Client(nn.Module):
             """docstring for ResNet"""
 
-            # Explain initialize (listing the neural network architecture and other related parameters)
             def __init__(self, config):
                 super(ResNet18Client, self).__init__()
                 # Explain this line
                 self.cut_layer = config["cut_layer"]
                 self.logits = config["logits"]
 
-                # Explain this line
-                # self.model = models.resnet18(pretrained=True)
-                # Newer version of (pretrained=True)
                 self.model = models.resnet18(weights=ResNet18_Weights.DEFAULT)
 
                 num_ftrs = self.model.fc.in_features
@@ -139,7 +135,6 @@ class Runner:
                 self.model = nn.ModuleList(self.model.children())
                 self.model = nn.Sequential(*self.model)
 
-            # Explain forward (actually used during the execution of the neural network at runtime)
             def forward(self, x):
                 for i, l in enumerate(self.model):
                     if i > self.cut_layer:
@@ -148,7 +143,7 @@ class Runner:
                 return x
         
 
-        config = {"cut_layer": self.config["cut_layer"], "logits": 10}
+        config = {"cut_layer": int(cut_layer), "logits": 10}
         client_model = ResNet18Client(config).to(device)
 
         criterion = nn.CrossEntropyLoss()
@@ -162,13 +157,11 @@ class Runner:
 
             if r > 0:
                 client_model.load_state_dict(global_numpy_weights)
-                # print("GLOBAL_CLIENT_WEIGHTS_LOADED")
                 del global_numpy_weights
 
 
 
             log_steps = 50
-            # num_epochs = epochs
 
             training_start_time = time.time()
             for epoch in range(num_epochs):
@@ -181,26 +174,20 @@ class Runner:
                 socket = context.socket(zmq.REQ)
                 url = split_address + ":"+ str(split_port)
                 socket.connect(url)
-                # socket.connect("tcp://35.237.244.119:5555")
                 
-                #busy wait for a response...
-               # socket.setsockopt(zmq.RCVTIMEO, 0)
-
                 #send cut layer of this model
                 socket.send(str(config["cut_layer"]).encode())
 
                 socket.recv()
 
                 iterations = len(trainloader)
-                # print(iterations)
                 send_iterations = str(iterations).encode()
                 socket.send(send_iterations)
 
                 names = socket.recv()
                 recv_names = names.decode()
-                # print(recv_names)
 
-                # print(datasetsize_used)
+
                 send_dataset_size = str(datasetsize_used).encode()
                 socket.send(send_dataset_size)
 
@@ -215,15 +202,12 @@ class Runner:
                 running_loss = 0.0
                 for i, data in enumerate(trainloader, 0):
                     step_start_time = time.time()
-                    # print(r, epoch, i)
                     inputs, labels = data[0].to(device), data[1].to(device)
 
                     client_optimizer.zero_grad()
 
-                    # print("LABELS", type(labels))
                     bytes_labels = convert.array_to_bytes(labels.cpu())
                     socket.send(bytes_labels)
-                    # print("labels_sent")
 
                     ##dummy......
                     names = socket.recv()
@@ -234,11 +218,9 @@ class Runner:
                     activations = client_model(inputs)
                     server_inputs = activations.detach().clone()
 
-                    # print("inside for for...")
                     bytes_server_inputs = convert.array_to_bytes(server_inputs.cpu())
                     server_work_time_start = time.time()
                     socket.send(bytes_server_inputs)
-                    # print("data_sent")
 
                     ###################################################################################################
 
@@ -258,7 +240,6 @@ class Runner:
                     numpy_loss = convert.bytes_to_array(recv_loss)
                     loss = torch.from_numpy(numpy_loss)
                     loss = loss.to(device)
-                    # print("loss_recieved")
 
 
                     #dummy
@@ -326,15 +307,12 @@ class Runner:
             socket1 = context1.socket(zmq.REQ)
             url = self.config["fed_server"]["server_ip"] + ":" + str(fed_port)
             socket1.connect(url)
-            # socket.connect("tcp://35.237.244.119:5555")
 
             weights = client_model.state_dict()
-            # print(type(weights))
             print("Size of model weights (before) in bytes is:", getsizeof(weights))
             bytes_weights = convert.ordered_dict_to_bytes(weights)
             print("Size of model weights (after) in bytes is:",
                   getsizeof(bytes_weights))
-            # time.sleep(10)
             socket1.send(bytes_weights)
 
             ## dummy recv
@@ -364,19 +342,15 @@ class Runner:
             print("Connecting to fed_avg server to recv global weights…")
             socket2 = context2.socket(zmq.REQ)
             
-            # Resolving IndexError: list index out of range
-            # url = "tcp://"+sys.argv[11] + ":"+sys.argv[12]
             url = self.config["fed_server"]["server_ip"] + ":" + str(self.config["fed_server"]["server_start_port"] + self.client_id - 1)
             
             socket2.connect(url)
-            # socket.connect("tcp://35.237.244.119:5555")
 
             msg = "send_global_weights"
             send_msg = msg.encode()
             socket2.send(send_msg)
 
             global_weights = socket2.recv()
-            # print("Global weights recieved from fedServer")
             print("Size of global model weights (before) in bytes is:", getsizeof(global_weights))
             global_numpy_weights = convert.bytes_to_dict(global_weights)
             print("Size of global model weights (after) in bytes is:", getsizeof(global_numpy_weights))

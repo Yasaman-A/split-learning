@@ -57,6 +57,13 @@ Clients in this architecture can have different cut layers. The current implemen
 - `python -m src.split-learning --mode splitfed_v1_custom_cut --fed`
 - `python -m src.split-learning --mode splitfed_v1_custom_cut --client 1 --extra 2`
 
+7. **split-fed v2 custom architecture (splitfed_v2_custom_cut)**:
+Clients in this architecture can have differing cut layers. The current implementation needs a data server, please see the Section related to *Splitting Data* and start the data server. Note that unlike the v1 custom architecture, the split server does not require any extra input.
+
+- `python -m src.split-learning --mode splitfed_v2_custom_cut --server`
+- `python -m src.split-learning --mode splitfed_v2_custom_cut --fed`
+- `python -m src.split-learning --mode splitfed_v2_custom_cut --client 1 --extra 2`
+
 
 ## Splitting Data
 Running non-iid.py will resolve in the number of non-idd data splits. Using `--generate` you can run the non-iid.py script from the `root` folder which generates data splits:

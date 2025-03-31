@@ -13,6 +13,10 @@ from .splitfed_v1_custom_cut import fed_server as splitfed_v1_custom_cut_fed_ser
 from .splitfed_v2 import client as splitfed_v2_client
 from .splitfed_v2 import server as splitfed_v2_server
 from .splitfed_v2 import fed_server as splitfed_v2_fed_server
+from .splitfed_v2_custom_cut import client as splitfed_v2_custom_cut_client
+from .splitfed_v2_custom_cut import server as splitfed_v2_custom_cut_server
+from .splitfed_v2_custom_cut import fed_server as splitfed_v2_custom_cut_fed_server
+
 from .non_iid import run
 import argparse
 
@@ -49,51 +53,63 @@ class Main:
             print("Mode cannot be empty")
             return
         
-        if args.mode == "basic_model":
-            path = "./src/split-learning/base_model"
-            if args.client != None:
-                module = base_client
-            else:
-                module = base_server
-        elif args.mode == "rr_multiclient":
-            path = "./src/split-learning/rr_multiclient"
-            if args.client != None:
-                module = rr_multiclient_client
-            else:
-                module = rr_multiclient_server
-        elif args.mode == "th_multiclient":
-            path = "./src/split-learning/th_multiclient"
-            if args.client != None:
-                module = th_multiclient_client
-            else:
-                module = th_multiclient_server
-        elif args.mode == "splitfed_v1":
-            path = "./src/split-learning/splitfed_v1"
-            if args.client != None:
-                module = splitfed_v1_client
-            elif args.server:
-                module = splitfed_v1_server
-            else:
-                module = splitfed_v1_fed_server
-        elif args.mode == "splitfed_v1_custom_cut":
-            path = "./src/split-learning/splitfed_v1_custom_cut"
-            if args.client != None:
-                module = splitfed_v1_custom_cut_client
-            elif args.server:
-                module = splitfed_v1_custom_cut_server
-            else:
-                module = splitfed_v1_custom_cut_fed_server
-        elif args.mode == "splitfed_v2":
-            path = "./src/split-learning/splitfed_v2"
-            if args.client != None:
-                module = splitfed_v2_client
-            elif args.server:
-                module = splitfed_v2_server
-            else:
-                module = splitfed_v2_fed_server
-        else:
-            print("Unrecognized mode", args.mode)
-            return
+
+
+        match args.mode:
+            case "basic_model":
+                path = "./src/split-learning/base_model"
+                if args.client != None:
+                    module = base_client
+                else:
+                    module = base_server
+            case "rr_multiclient":
+                path = "./src/split-learning/rr_multiclient"
+                if args.client != None:
+                    module = rr_multiclient_client
+                else:
+                    module = rr_multiclient_server
+            case "th_multiclient":
+                path = "./src/split-learning/th_multiclient"
+                if args.client != None:
+                    module = th_multiclient_client
+                else:
+                    module = th_multiclient_server
+            case "splitfed_v1":
+                path = "./src/split-learning/splitfed_v1"
+                if args.client != None:
+                    module = splitfed_v1_client
+                elif args.server:
+                    module = splitfed_v1_server
+                else:
+                    module = splitfed_v1_fed_server
+            case "splitfed_v1_custom_cut":
+                path = "./src/split-learning/splitfed_v1_custom_cut"
+                if args.client != None:
+                    module = splitfed_v1_custom_cut_client
+                elif args.server:
+                    module = splitfed_v1_custom_cut_server
+                else:
+                    module = splitfed_v1_custom_cut_fed_server
+            case "splitfed_v2":
+                path = "./src/split-learning/splitfed_v2"
+                if args.client != None:
+                    module = splitfed_v2_client
+                elif args.server:
+                    module = splitfed_v2_server
+                else:
+                    module = splitfed_v2_fed_server
+            case "splitfed_v2_custom_cut":
+                path = "./src/split-learning/splitfed_v2_custom_cut/"
+                if args.client != None:
+                    module = splitfed_v2_custom_cut_client
+                elif args.server:
+                    module = splitfed_v2_custom_cut_server
+                else:
+                    module = splitfed_v2_custom_cut_fed_server
+            case _:
+                print("Unrecognized mode", args.mode)
+                return
+    
         if not args.config:
             args.config = path + "/config.yaml"
 
