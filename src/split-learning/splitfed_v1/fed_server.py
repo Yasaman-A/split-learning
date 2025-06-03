@@ -9,23 +9,13 @@ arg1 --> CONFIG_FILE_PATH
 
 import copy
 import threading
-import torchvision
-import torchvision.transforms as transforms
-import torch.nn as nn
-import torch.nn.functional as F
-from torchvision import models
-import torch.optim as optim
-from torch.autograd import Variable
 import time
 import zmq
 import torch
-# from .utils import ordered_dict_to_bytes, bytes_to_dict
 from ..lib import convert
-import sys
 from sys import getsizeof
 import yaml
 import logging
-# from objsize import get_deep_size
 
 class Runner:
     def __init__(self, config_path) -> None:
@@ -40,16 +30,18 @@ class Runner:
 
         if (self.config["logging"]):
             # Create and configure logger
-            logging.basicConfig(filename="./fed_server_" + str(client_total) + "_" + 
-                                str(fed_port) + "_" + str(rnd) + ".log",
-                                format='%(asctime)s %(message)s',
-                                filemode='a')
-            # Creating an object
+            logging.basicConfig(
+                filename=f"./fed_server_{client_total}_{fed_port}_{rnd}.log",
+                format='%(asctime)s %(message)s',
+                filemode='a'
+            )
             logger = logging.getLogger()
             # Setting the threshold of logger to DEBUG
             logger.setLevel(logging.INFO)
-            logging.info('Parameters (FED_SERVER_LOG) ---------- [TOTAL_CLIENTS --> {}, STARTING_SERVER_PORT --> {}, ROUNDS --> {}] ---------- '.format(
-                str(client_total), str(fed_port), str(rnd)))
+            logging.info(
+                f"Parameters (FED_SERVER_LOG) ---------- [TOTAL_CLIENTS --> {client_total}, "
+                f"STARTING_SERVER_PORT --> {fed_port}, ROUNDS --> {rnd}] ----------"
+            )
 
 
         def average_weights(w, datasize):
@@ -64,15 +56,13 @@ class Runner:
             w_avg = copy.deepcopy(w[0])
 
             for key in w_avg.keys():
-                for i in range(1, len(w)):        ## IMP
+                for i in range(1, len(w)):
                     w_avg[key] += w[i][key]
                 w_avg[key] = torch.div(w_avg[key], float(sum(datasize)))
 
             return w_avg
 
 
-        # Binding socket with retry to overcome "address in use" error
-        # Binding happens only after the address is already not in use 
         def socket_bind_retry(socket, url, max_retries=10, delay=5):
             retries = 0
             while retries < max_retries:
@@ -98,14 +88,8 @@ class Runner:
             global client_weights
             global datasetsize_client
 
-            # Socket to talk to dispatcher
-            # context = zmq.Context()
             socket = context.socket(zmq.REP)
-
-            # socket.connect(worker_url)
-            # socket.connect("tcp://*:5555")
             
-            # Binding socket with retry to overcome "address in use" error
             if not socket_bind_retry(socket, url):
                 print(f"Failed binding to {url}.")
                 return
@@ -144,14 +128,8 @@ class Runner:
             global client_global_weights
 
             # Socket to talk to dispatcher
-            # context = zmq.Context()
             socket = context.socket(zmq.REP)
-
-            # socket.connect(worker_url)
-            # socket.connect("tcp://*:5555")
             
-            # Binding socket with retry to overcome "address in use" error
-            # socket.bind(url)
             if not socket_bind_retry(socket, url):
                 print(f"Failed binding to {url}.")
                 return
@@ -188,7 +166,6 @@ class Runner:
             total_threads = client_total
             port_no = fed_port
             connection_url = ["tcp://*:" + str(fed_port+i) for i in range(client_total)]
-            # connection_url = ["tcp://*:5555", "tcp://*:5556"]
 
             num_rounds = rnd
             context = zmq.Context()
@@ -232,6 +209,9 @@ class Runner:
 
                 for thread in thrs:  # have to check when it will run all epochs..
                     thread.join()
+                
+                if self.config["device"] != "cpu":
+                    time.sleep(1) #gpu is too fast for ZMQ; race condition occurs and fed server terminates.
 
                 print("All threads ended..")
             print("All rounds ended..")
