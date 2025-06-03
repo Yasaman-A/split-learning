@@ -77,7 +77,7 @@ def shuffle_and_split_iid_data(training_data, testing_data, num_clients, output_
     with open(output_name + ".pkl", 'wb') as f:
         pickle.dump(preprocessed, f, protocol=pickle.HIGHEST_PROTOCOL)
     print(f"Saving test data as: \'{output_name}_test.pkl\'")
-    with open(output_name + "_test" + "pkl", 'wb') as f:
+    with open(output_name + "_test" + ".pkl", 'wb') as f:
         pickle.dump(testing_set, f, protocol=pickle.HIGHEST_PROTOCOL)
 
     return
