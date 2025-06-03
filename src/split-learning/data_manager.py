@@ -103,4 +103,4 @@ def create_iid_dataset(dataset_name, num_clients=1, output_name="output", seed=N
     return 
 
 
-create_iid_dataset("cifar10", num_clients=6, seed=42, output_name="six_clients")
+#create_iid_dataset("cifar10", num_clients=6, seed=42, output_name="six_clients")

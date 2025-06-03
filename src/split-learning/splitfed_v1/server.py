@@ -151,7 +151,7 @@ class Runner:
                     step_start_time = time.time()
                     print(f"***TH - {thread_no}***  {epoch} {j}")
 
-                    #recieve labels
+                    #receive labels
                     recv_labels = socket.recv()
                     numpy_labels = convert.bytes_to_array(recv_labels)
                     labels = torch.from_numpy(numpy_labels)
@@ -253,7 +253,7 @@ class Runner:
                     thrs.append(thread)
                     thread.start()
 
-                for thread in thrs:         ##have to check when it will run all epochs..
+                for thread in thrs: 
                     thread.join()
 
                 print(f"Length of server weights: {len(server_weights)}")

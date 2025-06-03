@@ -73,7 +73,6 @@ class Runner:
             # Setting the threshold of logger to DEBUG
             logger.setLevel(logging.INFO)
 
-        #
         if(self.config["device"] == 'cpu'):
             device = 'cpu'
         else:
@@ -288,8 +287,11 @@ class Runner:
                         "step_time": f"{total_one_step_time:.3f}",
                         "server_time": f"{server_work_time:.3f}"
                     })
-                    logging.info("CLIENT_TOTAL_ONE_STEP_TIME = {:.3f}    , SERVER_WORK_TIME = {:.3f}" .format(
-                        total_one_step_time, server_work_time))
+                    logging.info(
+                        f"CLIENT_TOTAL_ONE_STEP_TIME = {total_one_step_time:.3f}    , "
+                        f"SERVER_WORK_TIME = {server_work_time:.3f}"
+                    )
+
                     
                     #BATCH OVER
 
@@ -298,8 +300,8 @@ class Runner:
                 total_one_epoch_time = epoch_end_time - epoch_start_time
 
                 print("\nCLIENT_TOTAL_ONE_EPOCH_TIME = ", total_one_epoch_time)
-                logging.info('\nCLIENT_TOTAL_ONE_EPOCH_TIME = {:.3f}'.format(total_one_epoch_time))
-                
+                logging.info(f"\nCLIENT_TOTAL_ONE_EPOCH_TIME = {total_one_epoch_time:.3f}")
+
                 print(f"Total data sent in epoch {epoch} (activations): {epoch_sent_to_split:.2f} bytes")
                 logging.info(f"Total data sent in epoch {epoch} (activations): {epoch_sent_to_split:.2f} bytes")
                 
@@ -370,9 +372,11 @@ class Runner:
 
             ## send dataset size for weighted avg
             socket1.send(send_dataset_size)
-
+            round_sent_to_fed += len(send_dataset_size)
+            
             # dummy recv
             names = socket1.recv()
+            round_received_from_fed += len(names)
 
             del weights
             del bytes_weights
@@ -417,23 +421,32 @@ class Runner:
             global_numpy_weights = convert.bytes_to_dict(global_weights)
             print(f"Size of global model weights (after) in bytes is (memory): {getsizeof(global_numpy_weights)}")
 
-            # # At the end of each round, log total data sent and received
-            total_data_sent_round = round_sent_to_split + round_sent_to_fed
-            total_data_received_round = round_received_from_split + round_received_from_fed
-            total_data_transmitted_round = total_data_sent_round + total_data_received_round
+            round_sent_to_servers = round_sent_to_fed + round_sent_to_split
+            round_rcvd_from_servers = round_received_from_fed + round_received_from_split
+            round_total = round_sent_to_servers + round_rcvd_from_servers
+
+            # At the end of each round, log total data sent and received
+            print("======== Round Networking Summary ========")
+            print(f"Data sent to Split Server: {round_sent_to_split} bytes")
+            print(f"Data sent to Fed Server: {round_sent_to_fed} bytes")
+            print(f"Total Sent: {round_sent_to_servers}")
+            print(f"Data received from Split Server: {round_received_from_split} bytes")
+            print(f"Data received from Fed Server: {round_received_from_fed} bytes")
+            print(f"Total Received: {round_rcvd_from_servers}")
+            print(f"===== \nTotal Transmitted this Round: {round_total}")
             
-            print(f"\nTotal data sent in this round: {total_data_sent_round:.2f} bytes")
-            logging.info(f"\nTotal data sent in this round: {total_data_sent_round:.2f} bytes")
-            
-            print(f"Total data received in this round: {total_data_received_round:.2f} bytes")
-            logging.info(f"Total data received in this round: {total_data_received_round:.2f} bytes")
-            
-            print(f"Total data transmitted in this round: {total_data_transmitted_round:.2f} bytes")
-            logging.info(f"Total data transmitted in this round: {total_data_transmitted_round:.2f} bytes")
+            logging.info("======== Round Networking Summary ========")
+            logging.info(f"Data sent to Split Server: {round_sent_to_split} bytes")
+            logging.info(f"Data sent to Fed Server: {round_sent_to_fed} bytes")
+            logging.info(f"Total Sent: {round_sent_to_servers}")
+            logging.info(f"Data received from Split Server: {round_received_from_split} bytes")
+            logging.info(f"Data received from Fed Server: {round_received_from_fed} bytes")
+            logging.info(f"Total Received: {round_rcvd_from_servers}")
+            logging.info(f"===== \nTotal Transmitted this Round: {round_total}")
             
             total_sent_to_split += round_sent_to_split
-            total_received_from_split += round_received_from_split
             total_sent_to_fed += round_sent_to_fed
+            total_received_from_split += round_received_from_split
             total_received_from_fed += round_received_from_fed
 
             socket2.close()

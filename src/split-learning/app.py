@@ -17,7 +17,10 @@ from .splitfed_v2_custom_cut import client as splitfed_v2_custom_cut_client
 from .splitfed_v2_custom_cut import server as splitfed_v2_custom_cut_server
 from .splitfed_v2_custom_cut import fed_server as splitfed_v2_custom_cut_fed_server
 
+
 from .non_iid import run
+from .data_manager import create_iid_dataset as create_iid_dataset#, create_noniid_dataset as create_noniid_dataset
+
 import argparse
 
 class Main:
@@ -25,23 +28,29 @@ class Main:
     @staticmethod
     def run():
         parser = argparse.ArgumentParser(description='Run client and server part of different modes.')
-        parser.add_argument('--mode', type=str, help='The mode to run.')
-        parser.add_argument('--config', type=str, help='Config file path.')
-        parser.add_argument('--server', action='store_true', help='Run the server.')
-        parser.add_argument('--fed', action='store_true', help='Run the fed server.')
-        parser.add_argument('--client', type=int, help='Run client with id.')
-        parser.add_argument('--extra', type=str, help='Run client with id.')
+        parser.add_argument('--mode',  type=str,            help='The mode to run.')
+        parser.add_argument('--config',type=str,            help='Config file path.')
+        parser.add_argument('--server',action='store_true', help='Run the server.')
+        parser.add_argument('--fed',   action='store_true', help='Run the fed server.')
+        parser.add_argument('--client',type=int,            help='Run client with id.')
+        parser.add_argument('--extra', type=str,            help='Run client with id.')
 
         # Arguments for creating the no_iid pickle file. If this exists, it will have priority over the above
-        parser.add_argument('--generate', action='store_true', help='For non-iid.')
-        parser.add_argument('--classes_pc', type=int, default=2, help='For non-iid.')
-        parser.add_argument('--num_clients', type=int, default=6, help='For non-iid.')
-        parser.add_argument('--batch_size', type=int, default=128, help='For non-iid.')
+        parser.add_argument('--generate',    action='store_true', help='For non-iid.')
+        parser.add_argument('--iid',         type=bool,           help='For selecting iid type')
+        parser.add_argument('--dataset_name',type=str,            help='For selecting which dataset to use')
+        parser.add_argument('--output_name', type=str,            help='data output file name')
+        parser.add_argument('--classes_pc',  type=int, default=2, help='For non-iid.')
+        parser.add_argument('--num_clients', type=int, default=6, help='Number of clients to split data for')
+        parser.add_argument('--seed',        type=int, default=42,help='Seed for consistent data generation')
 
         args = parser.parse_args()
         if args.generate:
-            run(args.classes_pc, args.num_clients, args.batch_size)
-            return
+            if args.iid:
+                create_iid_dataset(args.dataset_name, num_clients=args.num_clients,
+                                   output_name=args.output_name, seed=args.seed)
+            # else:
+            #     create_noniid_dataset()
 
         if args.server == None and args.client == None and args.fed == None:
             print("Must select clien, server, or fed mode")
