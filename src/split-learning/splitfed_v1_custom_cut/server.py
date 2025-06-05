@@ -15,23 +15,18 @@ arg7..x --> cut layers for all clients
 
 # eg command: python server_splitnn_th_REPREQ.py 2 5555 cpu
 
-from locale import atoi
+#from locale import atoi
 import copy
 import threading
-import torchvision
-import torchvision.transforms as transforms
 import torch.nn as nn
-import torch.nn.functional as F
 from torchvision import models
-from torchvision.models import ResNet18_Weights
 import torch.optim as optim
 from torch.autograd import Variable
 import time
 import zmq
 import torch
 from ..lib import convert
-import sys
-from .custom_model_avg import server_custom_avg_model
+from .custom_model_avg import custom_model_avg
 import yaml
 import logging
 # from objsize import get_deep_size
@@ -45,7 +40,7 @@ class Runner:
             print("Read successful")
     
     def set_extra_options(self, extra):
-        self.server_cut_layer_list = extra.split(",")
+        self.server_cut_layer_list = [int(x) for x in extra.split(",")] 
 
     def run(self):
         client_total = self.config["client_total"]
@@ -62,7 +57,7 @@ class Runner:
 
         if (self.config["logging"]):
             # Create and configure logger
-            logging.basicConfig(filename="./cc_sf_server_" + str(client_total) + "_" + str(split_port) + "_" + device +  "_" + str(epochs) + "_" + str(rnd) + ".log",
+            logging.basicConfig(filename="./cc_sf_server_" + str(client_total) + "_" + str(split_port) + "_" + str(device) +  "_" + str(epochs) + "_" + str(rnd) + ".log",
                                 format='%(asctime)s %(message)s',
                                 filemode='a')
             # Creating an object
@@ -70,28 +65,7 @@ class Runner:
             # Setting the threshold of logger to DEBUG
             logger.setLevel(logging.INFO)
             logging.info('Parameters (SF_SERVER_LOG) ---------- [TOTAL_CLIENTS --> {}, STARTING_SERVER_PORT --> {}, DEVICE_TYPE --> {}, EPOCHS --> {}, ROUNDS --> {}] ---------- '.format(str(client_total), str(split_port), device, str(epochs), str(rnd)))
-
-
-
-        def average_weights(w, datasize):
-            """
-            Returns the average of the weights.
-            """
-
-            for i, data in enumerate(datasize):
-                for key in w[i].keys():
-                    w[i][key] *= data
-
-            w_avg = copy.deepcopy(w[0])
-
-            for key in w_avg.keys():
-                for i in range(1, len(w)):
-                    w_avg[key] += w[i][key]
-                w_avg[key] = torch.div(w_avg[key], float(sum(datasize)))
-
-            return w_avg
-
-
+            
 
         def worker_routine(url, context, thread_no, r, cut_layer):
             """ Worker routine """
@@ -134,43 +108,35 @@ class Runner:
                 def __init__(self, config):
                     super(ResNet18Server, self).__init__()
                     self.logits = config["logits"]
-                    self.cut_layer = atoi(cut_layer)
+                    self.cut_layer = cut_layer
 
-                    # self.model = models.resnet18(pretrained=True)
-                    # Newer version of (pretrained=True)
-                    self.model = models.resnet18(weights=ResNet18_Weights.DEFAULT)
-
+                    self.model = models.resnet18(weights=None)
+                    
                     num_ftrs = self.model.fc.in_features
-                    # Explain this part
                     self.model.fc = nn.Sequential(nn.Flatten(),
                                                   nn.Linear(num_ftrs, self.logits))
+                    
+                    self.layers = list(self.model.children())
 
-                    self.model = nn.ModuleList(self.model.children())
-                    self.model = nn.Sequential(*self.model)
 
                 def forward(self, x):
-                    for i, l in enumerate(self.model):
-                        # Explain this part
+                    for i, l in enumerate(self.layers):
                         if i <= self.cut_layer:
                             continue
                         x = l(x)
-                    return nn.functional.softmax(x, dim=1)
+                    return x
+                
+                def classify(self, x):
+                    return nn.functional.softmax(self.forward(x))
 
-            # if (sys.argv[4] == 'list'):
             config = {"cut_layer": cut_layer, "logits": 10}
-
-            # else:
-            #     config = {"cut_layer": int(sys.argv[4]), "logits": 10}
-
-
-            # client_model = ResNet18Client(config).to(device)
             server_model = ResNet18Server(config).to(device)
 
             criterion = nn.CrossEntropyLoss()
-            # client_optimizer = optim.SGD(client_model.parameters(), lr=0.01, momentum=0.9)
             server_optimizer = optim.SGD(
                 server_model.parameters(), lr=0.01, momentum=0.9)
 
+            #load aggregated server weights
             if r > 0:
                 server_model.load_state_dict(server_global_weights)
                 print("GLOBAL_SERVER_WEIGHTS_LOADED")
@@ -196,87 +162,70 @@ class Runner:
             round_start_time = time.time()
             for epoch in range(num_epochs):
                 epoch_start_time = time.time()
-                running_loss = 0.0
-                # for i, data in enumerate(trainloader, 0):
+
                 for j in range(recv_iterations):
                     step_start_time = time.time()
-                    print("***TH - {}***  {} {}".format(thread_no, epoch, j))
+                    print(f"***TH - {thread_no}***  {epoch} {j}")
 
-                    server_optimizer.zero_grad()
-
+                    #receive labels
                     recv_labels = socket.recv()
                     numpy_labels = convert.bytes_to_array(recv_labels)
                     labels = torch.from_numpy(numpy_labels)
                     labels = labels.to(device)
-                    # print("labels_recieved")
 
                     ##dummy......
                     socket.send(send_msg)
 
-                    # print("inside for for")
+                    #get client activations
                     recv_serv_inputs = socket.recv()
                     numpy_server_inputs = convert.bytes_to_array(recv_serv_inputs)
                     server_inputs = torch.from_numpy(numpy_server_inputs)
                     server_inputs = server_inputs.to(device)
-                    # print("data_recieved")
 
-                    ###################################################################################################
-
-                    # Simulation of server part is happening in this portion
-                    # Server part
+                    #forward pass
                     server_inputs = Variable(server_inputs, requires_grad=True)
                     outputs = server_model(server_inputs)
+
+                    server_optimizer.zero_grad()
                     loss = criterion(outputs, labels)
                     loss.backward()
 
-                    # server optimization
+                    #Send gradients back to client.
+                    transfer_loss = server_inputs.grad.clone().detach()
+                        #only contains grad for client layers
                     server_optimizer.step()
 
-                    transfer_loss = loss.detach().clone()
                     bytes_loss = convert.array_to_bytes(transfer_loss.cpu())
                     socket.send(bytes_loss)
-
-                    #dummy
-                    socket.recv()
-
-                    for layer, param in enumerate(server_model.parameters()):   
-                        if param.grad is not None:
-                            grad_numpy = param.grad.detach().cpu().numpy()
-                        else:
-                            grad_numpy = torch.zeros_like(param).cpu().numpy()
-                        
-                        grad_bytes = convert.array_to_bytes(grad_numpy)
-                        socket.send(grad_bytes)
-
-                        #dummy
-                        socket.recv()
-
-                    socket.send(b"ack")
-
+                    
+                    #telemetry
                     step_end_time = time.time()
                     total_one_step_time = step_end_time - step_start_time
-                    print("***TH - {}***  SERVER_TOTAL_ONE_STEP_TIME = {:.3f}".format(thread_no, total_one_step_time))
-                    logging.info('***TH - {}***  SERVER_TOTAL_ONE_STEP_TIME = {:.3f}'.format(thread_no, total_one_step_time))
+                    print(f"***TH - {thread_no}***  SERVER_TOTAL_ONE_STEP_TIME = {total_one_step_time:.3f}, loss: {loss.item():.3f}")
+                    logging.info(f"***TH - {thread_no}***  SERVER_TOTAL_ONE_STEP_TIME = {total_one_step_time:.3f}, loss: {loss.item():.3f}")
 
 
                     ################################################################################
 
                 epoch_end_time = time.time()
                 total_one_epoch_time = epoch_end_time - epoch_start_time
-                print("***TH - {}***  SERVER_TOTAL_ONE_EPOCH_TIME = {:.3f}" .format(thread_no, total_one_epoch_time))
-                logging.info('***TH - {}***  SERVER_TOTAL_ONE_EPOCH_TIME = {:.3f}'.format(thread_no, total_one_epoch_time))
+                print(f"***TH - {thread_no}***  SERVER_TOTAL_ONE_EPOCH_TIME = {total_one_epoch_time:.3f}")
+                logging.info(f"***TH - {thread_no}***  SERVER_TOTAL_ONE_EPOCH_TIME = {total_one_epoch_time:.3f}")
 
                 ##################################################################################################################
 
             round_end_time = time.time()
             round_time = round_end_time - round_start_time
-            print("***TH - {}***  SERVER_ROUND_TRAINING_TIME = {:.3f}" .format(thread_no, round_time))
-            logging.info('***TH - {}***  SERVER_ROUND_TRAINING_TIME = {:.3f}'.format(thread_no, round_time))
+            print(f"***TH - {thread_no}***  SERVER_ROUND_TRAINING_TIME = {round_time:.3f}")
+            logging.info(f"***TH - {thread_no}***  SERVER_ROUND_TRAINING_TIME = {round_time:.3f}")
 
             server_weights.append(server_model.state_dict())
             datasetsize_server.append(dataset_size)
 
-            model_save_name = "./server_thread_model_r" + str(r) + "_" + str(thread_no) + "_" +str(client_total) + "_" + str(split_port)  + "_" + device +  "_" + str(epochs) + ".pt"
+            model_save_name = (
+                f"./server_thread_model_r{r}_{thread_no}_{client_total}_"
+                f"{split_port}_{device}_{cut_layer}_{epochs}.pt"
+            )
             torch.save(server_model.state_dict(), model_save_name)
             print("***TH - {}***  MODEL_SAVED." .format(thread_no))
 
@@ -304,9 +253,6 @@ class Runner:
             total_threads = client_total
             port_no = split_port
             connection_url = ["tcp://*:" +str(port_no+i) for i in range(total_threads)]
-            # connection_url = ["tcp://*:5555", "tcp://*:5556"]
-
-            # print(self.server_cut_layer_list)
 
             num_rounds = rnd
             context = zmq.Context()
@@ -325,7 +271,7 @@ class Runner:
                     thrs.append(thread)
                     thread.start()
 
-                for thread in thrs:         ##have to check when it will run all epochs..
+                for thread in thrs: 
                     thread.join()
 
                 print("Length of server weights:", len(server_weights))
@@ -333,10 +279,12 @@ class Runner:
 
 
                 # Server models weighted averaging..
-                # server_global_weights = average_weights(server_weights, datasetsize_server)
-                server_global_weights = server_custom_avg_model(server_weights, datasetsize_server, self.server_cut_layer_list)
+                server_global_weights = custom_model_avg(True, server_weights, datasetsize_server, self.server_cut_layer_list)
 
-                model_save_name = "./cc_server_fedAvg_model_r" + str(r) + "_" + str(client_total) + "_" + str(split_port)  + "_" + device + "_" + str(self.server_cut_layer_list) + "_" + str(epochs) + "_" + str(rnd) + ".pt"
+                model_save_name = (
+                    f"./server_fedAvg_model_r{r}_{client_total}_{split_port}_"
+                    f"{device}_{self.server_cut_layer_list}_{epochs}_{rnd}.pt"
+                )
 
                 torch.save(server_global_weights, model_save_name)
                 print("MODEL_SAVED.")
@@ -347,8 +295,8 @@ class Runner:
 
             training_end_time = time.time()
             training_time = training_end_time - training_start_time
-            print("SERVER_TOTAL_TRAINING_TIME = {:.3f}" .format(training_time))
-            logging.info('SERVER_TOTAL_TRAINING_TIME = {:.3f}'.format(training_time))
+            print(f"SERVER_TOTAL_TRAINING_TIME = {training_time:.3f}")
+            logging.info(f"SERVER_TOTAL_TRAINING_TIME = {training_time:.3f}")
 
             context.term()
 

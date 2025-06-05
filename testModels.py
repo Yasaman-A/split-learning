@@ -221,23 +221,17 @@ def plot_convergence(device):
     import matplotlib.pyplot as plt
 
     root = "./"#convergence/v1_med"
-    client = ""#client_fedavg"
-    #server = "server_thread"
-    #client = "c_thread"
-    server = ""#s_fedavg"
+    client = ""
+    server = ""
 
-    #client_fmt = "client_fedAvg_model_r{}_3.pt"
-    #server_fmt = "server_thread_model_r{}_1"
-    #client_fmt = "c_thread_r{}_1"
-    #client_fmt = "client_thread_model_r{}_1_5555_gpu_3_5_s_1_128_25_4445.pt"
-    server_fmt = "server_fedAvg_model_r{}_3_5555_cuda_5_3_10.pt"
-    #server_fmt = "server_thread_model_r{}_1_3_5555_cuda_5_2.pt"
-    client_fmt = "client_fedAvg_model_r{}_3_4445_10.pt"
+    server_fmt = "server_fedAvg_model_r{}_6_5555_cuda_[2, 3, 4, 2, 3, 4]_10_10.pt"
+    client_fmt = "client_fedAvg_model_r{}_6_4445_10.pt"
 
     accuracies = []
-    cut_layer = 5
+    cut_layer = 4
+    rounds = 10
 
-    for round_num in range(10):
+    for round_num in range(rounds):
         print("======================================================")
         client_path = os.path.join(root, client, client_fmt.format(round_num))
         server_path = os.path.join(root, server, server_fmt.format(round_num))

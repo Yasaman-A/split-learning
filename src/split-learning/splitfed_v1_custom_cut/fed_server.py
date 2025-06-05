@@ -8,24 +8,14 @@ arg1 --> CONFIG_FILE_PATH
 
 import copy
 import threading
-import torchvision
-import torchvision.transforms as transforms
-import torch.nn as nn
-import torch.nn.functional as F
-from torchvision import models
-import torch.optim as optim
-from torch.autograd import Variable
 import time
 import zmq
 import torch
-# from convert import array_to_bytes, bytes_to_array, ordered_dict_to_bytes, bytes_to_dict
 from ..lib import convert
-import sys
 import yaml
 from sys import getsizeof
-from .custom_model_avg import client_custom_avg_model
+from .custom_model_avg import custom_model_avg
 import logging
-# from objsize import get_deep_size
 
 
 class Runner:
@@ -207,9 +197,8 @@ class Runner:
                 print("Length of cut_layers: ", len(client_cut_layer_list))
 
 
-                # Client models weighted averaging..
-                # client_global_weights = average_weights(client_weights, datasetsize_client)
-                client_global_weights = client_custom_avg_model(client_weights, datasetsize_client, client_cut_layer_list)
+
+                client_global_weights = custom_model_avg(False, client_weights, datasetsize_client, client_cut_layer_list)
                 print("Global clients calculated..")
 
                 model_save_name = "./client_fedAvg_model_r" + str(r) + "_" + str(client_total) + "_" + str(fed_port) + "_" + str(rnd) + ".pt"
@@ -227,8 +216,9 @@ class Runner:
 
                 for thread in thrs:  # have to check when it will run all epochs..
                     thread.join()
-
-
+                
+                if self.config["device"] != "cpu":
+                    time.sleep(1) #gpu is too fast for ZMQ; race condition occurs and fed server terminates.
 
                 print("All threads ended..")
             print("All rounds ended..")
