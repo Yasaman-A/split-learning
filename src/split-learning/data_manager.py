@@ -64,11 +64,19 @@ def preprocess_subset(subset, index):
 def print_distribution_statistics(dataset, subsets):
     classes = sorted(set([label for _, label in dataset]))
 
+    total_counts = [0] * len(classes)
+
     for i, subset in enumerate(subsets):
         labels = [dataset[idx][1] for idx in subset.indices]
         label_counts = Counter(labels)
         counts_per_class = [label_counts.get(c, 0) for c in classes]
-        print(f"Client {i}: {counts_per_class}")
+
+        for idx, count in enumerate(counts_per_class):
+            total_counts[idx] += count
+
+        print(f"Client {i:3d}: "
+              f"[{', '.join(f'{count:5d}' for count in counts_per_class)}]"
+              f" Train Length: {len(subset)}")
 
     return
 
@@ -150,30 +158,19 @@ def split_non_iid_data(training_data, testing_data, num_clients, output_name, cl
         classes_per_client (int): Number of classes each client should have data for.
     '''
     
-    class_to_indices = defaultdict(list)
+    labels = np.array([label for _, label in training_data])
+    sorted_indices = np.argsort(labels)
 
-    for idx, (_, label) in enumerate(training_data):
-        class_to_indices[label].append(idx)
+    num_shards = num_clients * classes_per_client
+    shard_size = len(training_data) // num_shards
+    shards = [sorted_indices[i * shard_size:(i+1) * shard_size] for i in range(num_shards)]
 
-    classes = list(class_to_indices.keys())
-    num_classes = len(classes)
-    random.shuffle(classes)
-
-
-    client_classes = []
-    for i in range(num_clients):
-        assigned = []
-        start = (i * classes_per_client) % num_classes
-        for j in range(classes_per_client):
-            assigned.append(classes[(start + j) % num_classes])
-        client_classes.append(assigned)
+    np.random.shuffle(shards)
 
     client_indices = []
-    for assigned_classes in client_classes:
-        indices = []
-        for cls in assigned_classes:
-            indices.extend(class_to_indices[cls])
-        client_indices.append(indices)
+    for i in range(num_clients):
+        assigned_shards = shards[i * classes_per_client:(i + 1) * classes_per_client]
+        client_indices.append(np.concatenate(assigned_shards))
 
     train_subsets = [Subset(training_data, indices) for indices in client_indices]
 
@@ -237,4 +234,4 @@ def create_non_iid_dataset(dataset_name, num_clients, output_name="output", clas
     return
 
 #create_iid_dataset("cifar10", num_clients=6, seed=42, output_name="six_clients")
-create_non_iid_dataset("cifar-10", 3, "non-iid", 4, seed=42)
+#create_non_iid_dataset("cifar-10", num_clients=6, output_name="non-iid_6_2", classes_per_client=2, seed=42)
