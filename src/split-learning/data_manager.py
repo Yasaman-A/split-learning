@@ -220,7 +220,7 @@ def create_iid_dataset(dataset_name, num_clients=1, output_name="output", seed=N
 
     train, test = fetch_data(dataset_name)
 
-    shuffle_and_split_iid_data(train, test, num_clients, output_name, seed=seed)
+    shuffle_and_split_iid_data(train, test, num_clients, output_name)
     return 
 
 

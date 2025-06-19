@@ -66,16 +66,27 @@ Clients in this architecture can have differing cut layers. The current implemen
 
 
 ## Splitting Data
-Running non-iid.py will resolve in the number of non-idd data splits. Using `--generate` you can run the non-iid.py script from the `root` folder which generates data splits:
-`python -m src.split-learning --generate` this code can accept three parameters: `--classes_pc`, `--num_clients`, and `--batch_size`. If any of these parameters are not passed, then the default values of 2, 6, 128 will be used. To generate data with non-default values:
-`python -m src.split-learning --generate --classes_pc 4 --num_clients 6 --batch_size 128`
+datamanager.py exists to grab and split datasets among a number of clients. The datamanger saves to .pkl files: the trainset, {output_name}.pkl; and the test set {output_name}_test.pkl. This code can be easily run via the following command  
+`python -m src.split-learning --generate`  
+This code can accept the following parameters:  
+`--iid`: Boolean value whether to split as iid or non-iid  
+`--num_clients`: Number of clients to split the data among. Default value of 6.  
+`--dataset_name`: Name of the dataset to use for generation (e.g. 'cifar10')  
+`--output_name`: Name of the output files. Will create {output_name}.pkl, {output_name}_test.pkl  
+`--seed`: Seed to fix random generation to.  
+`--classes_pc`: For non-iid data generaition. Decides how many labels each data split gets. Default value of 2.  
 
+Example calls are as follows:
 
-Note: if you need to devide code among *x* clients, pass *x+1* as the *num_clients*. This is due to the implementation of the code that assigns very few data points to the last client which makes the last split to be a useless split.
+`python -m src.split-learning --generate --iid True --dataset_name cifar10 --output_name output --num_clients 6 --seed 42`  
+`python -m src.split-learning --generate --iid False --dataset_name cifar10 --output_name output_non_iid --num_clients 6 --classes_pc 2 --seed 42`
 
-Running non-iid.py results in *output.pickle* file. This pickle file should be placed on the data server directory. Data server can be started using: `python -m http.server port_number`, e.g. `python -m http.server 8000`
+To use the split data, a simple python file server should be spun up in the directory containing the pickle files.  
+`python -m http.server port_number`, e.g. `python -m http.server 8000`
 
+Non-iid data is generated via the sharding method.
 
+More datasets may be added to the datamanager by adding a simple getter function to the dictionary of datasets.
 
 ## Common Files
 - **Convert**: This is a utility file that contains some conversion utility methods.
