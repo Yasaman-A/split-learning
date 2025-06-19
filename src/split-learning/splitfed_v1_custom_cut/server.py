@@ -46,7 +46,7 @@ class Runner:
         client_total = self.config["client_total"]
         split_port = self.config["split_server"]["server_start_port"]
         device = self.config["device"]
-        # cut_layer = self.config["cut_layer"]
+        #cut_layer = self.config["cut_layer"]
         epochs = self.config["epoch"]
         rnd = self.config["round"]
 
@@ -55,17 +55,24 @@ class Runner:
         print(device)
 
 
+               #Initialize Logger
         if (self.config["logging"]):
-            # Create and configure logger
-            logging.basicConfig(filename="./cc_sf_server_" + str(client_total) + "_" + str(split_port) + "_" + str(device) +  "_" + str(epochs) + "_" + str(rnd) + ".log",
-                                format='%(asctime)s %(message)s',
-                                filemode='a')
-            # Creating an object
+            logging.basicConfig(
+                filename=(
+                    f"./sf_server_{client_total}_{split_port}_{device}_"
+                    f"{self.server_cut_layer_list}_{epochs}_{rnd}.log"
+                ),
+                format='%(asctime)s %(message)s',
+                filemode='a'
+            )
             logger = logging.getLogger()
-            # Setting the threshold of logger to DEBUG
             logger.setLevel(logging.INFO)
-            logging.info('Parameters (SF_SERVER_LOG) ---------- [TOTAL_CLIENTS --> {}, STARTING_SERVER_PORT --> {}, DEVICE_TYPE --> {}, EPOCHS --> {}, ROUNDS --> {}] ---------- '.format(str(client_total), str(split_port), device, str(epochs), str(rnd)))
-            
+            logging.info(
+                f"Parameters (SF_SERVER_LOG) ---------- "
+                f"[TOTAL_CLIENTS --> {client_total}, STARTING_SERVER_PORT --> {split_port}, "
+                f"DEVICE_TYPE --> {device}, "
+                f"EPOCHS --> {epochs}, ROUNDS --> {rnd}] ----------"
+            )
 
         def worker_routine(url, context, thread_no, r, cut_layer):
             """ Worker routine """
@@ -74,31 +81,9 @@ class Runner:
             global server_weights
             global datasetsize_server
 
-            # Socket to talk to dispatcher
-            # context = zmq.Context()
             socket = context.socket(zmq.REP)
 
-            # socket.connect(worker_url)
-            # socket.connect("tcp://*:5555")
             socket.bind(url)
-
-            ##*****************************************************************************************************************
-            ##*****************************************************************************************************************
-            ##*****************************************************************************************************************
-
-            ##################################################################################################################
-
-            # from mpi4py import MPI
-            # import time
-            # import logging
-
-            # logging.basicConfig(format='%(asctime)s %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
-            #                     datefmt='%d-%m-%Y:%H:%M:%S',
-            #                     level=logging.INFO,
-            #                     filename='logs.txt')
-
-            # # logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
-            # logging.info('Code started..')
 
 
 
@@ -250,6 +235,8 @@ class Runner:
             server_weights = []
             datasetsize_server = []
 
+            server_global_exposure = {} #for final aggregation
+
             total_threads = client_total
             port_no = split_port
             connection_url = ["tcp://*:" +str(port_no+i) for i in range(total_threads)]
@@ -279,7 +266,7 @@ class Runner:
 
 
                 # Server models weighted averaging..
-                server_global_weights = custom_model_avg(True, server_weights, datasetsize_server, self.server_cut_layer_list)
+                server_global_weights, server_global_exposure = custom_model_avg(True, server_weights, datasetsize_server, self.server_cut_layer_list)
 
                 model_save_name = (
                     f"./server_fedAvg_model_r{r}_{client_total}_{split_port}_"
@@ -289,9 +276,32 @@ class Runner:
                 torch.save(server_global_weights, model_save_name)
                 print("MODEL_SAVED.")
 
-
                 print("All threads ended..")
             print("All rounds ended..")
+
+            print("Sending to fed server...")
+            fed_context = zmq.Context()
+            fed_url = f"{self.config["fed_server"]["server_ip"]}:{self.config["fed_server"]["server_start_port"] + client_total}"
+            fed_socket = fed_context.socket(zmq.REQ)
+            fed_socket.connect(fed_url)
+            print(f"Connected on {fed_url}")
+
+
+            bytes_weights = convert.ordered_dict_to_bytes(server_global_weights)
+            fed_socket.send(bytes_weights)
+            fed_socket.recv()
+            print("Weights sent")
+
+            print(server_global_exposure)
+
+            bytes_exposure = convert.ordered_dict_to_bytes(server_global_exposure)
+            fed_socket.send(bytes_exposure)
+            fed_socket.recv()
+            print("exposure sent")
+
+            fed_socket.close()
+            fed_context.term()
+            print("socket closed)")
 
             training_end_time = time.time()
             training_time = training_end_time - training_start_time

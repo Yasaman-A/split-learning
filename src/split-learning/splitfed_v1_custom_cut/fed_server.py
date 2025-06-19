@@ -14,7 +14,7 @@ import torch
 from ..lib import convert
 import yaml
 from sys import getsizeof
-from .custom_model_avg import custom_model_avg
+from .custom_model_avg import custom_model_avg, combine_fed_avg_models
 import logging
 
 
@@ -166,6 +166,8 @@ class Runner:
             datasetsize_client = []
             client_cut_layer_list = []
 
+            client_exposure = []
+
             total_threads = int(client_total)
             port_no = int(fed_port)
             connection_url = ["tcp://*:" + str(fed_port+i) for i in range(client_total)]
@@ -197,8 +199,8 @@ class Runner:
                 print("Length of cut_layers: ", len(client_cut_layer_list))
 
 
+                client_global_weights, client_exposure = custom_model_avg(False, client_weights, datasetsize_client, client_cut_layer_list)
 
-                client_global_weights = custom_model_avg(False, client_weights, datasetsize_client, client_cut_layer_list)
                 print("Global clients calculated..")
 
                 model_save_name = "./client_fedAvg_model_r" + str(r) + "_" + str(client_total) + "_" + str(fed_port) + "_" + str(rnd) + ".pt"
@@ -222,6 +224,31 @@ class Runner:
 
                 print("All threads ended..")
             print("All rounds ended..")
+
+            serv_context = zmq.Context()
+            serv_url = f"tcp://*:{fed_port+client_total}"
+            serv_socket = serv_context.socket(zmq.REP)
+            serv_socket.bind(serv_url)
+            print(f"listening on {serv_url}")
+
+            bytes_weights = serv_socket.recv()
+            serv_socket.send("a".encode())
+            serv_weights = convert.bytes_to_dict(bytes_weights)
+            print("got weights")
+
+            bytes_exposure = serv_socket.recv()
+            serv_socket.send("a".encode())
+            serv_exposure = convert.bytes_to_dict(bytes_exposure)
+            print("got exposure")
+
+            serv_socket.close()
+            serv_context.term()
+            print("socket closed")
+
+            final_model_weights = combine_fed_avg_models(client_global_weights, client_exposure, serv_weights, serv_exposure)
+            model_save_name = f"./final_aggregate_model.pt"
+            torch.save(final_model_weights, model_save_name)
+
 
             context.term()
 
