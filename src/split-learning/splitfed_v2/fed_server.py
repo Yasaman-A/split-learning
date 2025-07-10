@@ -10,22 +10,47 @@ arg1 --> CONFIG_FILE_PATH
 
 import copy
 import threading
-import torchvision
-import torchvision.transforms as transforms
-import torch.nn as nn
-import torch.nn.functional as F
-from torchvision import models
-import torch.optim as optim
-from torch.autograd import Variable
 import time
 import zmq
 import torch
 from ..lib import convert
-import sys
 from sys import getsizeof
 import yaml
 import logging
+import torch.nn as nn
+from torchvision import models
 # from objsize import get_deep_size
+
+
+class ResNet18Client(nn.Module):
+    """docstring for ResNet"""
+
+    def __init__(self, config):
+        super(ResNet18Client, self).__init__()
+        self.cut_layer = config["cut_layer"]
+        self.logits = config["logits"]
+
+        self.model = models.resnet18(weights=None)
+        self.replace_batch_with_group_norm(self.model, num_groups=32)
+
+        num_ftrs = self.model.fc.in_features
+        self.model.fc = nn.Sequential(nn.Flatten(),
+                                        nn.Linear(num_ftrs, self.logits))
+
+
+        self.layers = list(self.model.children())
+
+    def replace_batch_with_group_norm(self, module, num_groups = 32):
+        for name, child in module.named_children():
+            if isinstance(child, nn.BatchNorm2d):
+                num_channels = child.num_features
+                gn = nn.GroupNorm(num_groups=min(num_groups, num_channels), num_channels=num_channels)
+                setattr(module, name, gn)
+            else:
+                self.replace_batch_with_group_norm(child, num_groups=num_groups)
+
+
+
 
 class Runner:
     def __init__(self, config_path) -> None:
@@ -53,22 +78,34 @@ class Runner:
 
 
 
-        def average_weights(w, datasize):
+        def average_weights(state_dicts, datasizes):
             """
             Returns the average of the weights.
             """
+            info = ResNet18Client({"cut_layer" : self.config["cut_layer"], "logits": 10})
+            
+            w_avg = copy.deepcopy(state_dicts[0])
 
-            for i, data in enumerate(datasize):
-                for key in w[i].keys():
-                    w[i][key] *= data
+            for i, data in enumerate(datasizes):
+                for key in state_dicts[i].keys():
+                    state_dicts[i][key] *= data
 
-            w_avg = copy.deepcopy(w[0])
+           
 
-            for key in w_avg.keys():
-                for i in range(1, len(w)):
-                    w_avg[key] += w[i][key]
-                w_avg[key] = torch.div(w_avg[key], float(sum(datasize)))
+            for layer_idx, (layer_name, layer) in enumerate(info.model.named_children()):
+                for key in info.state_dict().keys():
+                    if key.startswith(f"{layer_name}"):
+                        weight_value = 0
+                        weight_size_sum = 0
 
+                        for state_idx, state in enumerate(state_dicts):
+                            if (layer_idx <= self.config["cut_layer"]):
+                                weight_value += state[key]
+                                weight_size_sum += datasizes[state_idx]
+                        
+                        if weight_size_sum > 0:
+                            w_avg[key] = weight_value / weight_size_sum
+        
             return w_avg
 
 
