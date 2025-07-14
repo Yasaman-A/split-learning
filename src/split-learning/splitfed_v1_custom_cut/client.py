@@ -70,12 +70,14 @@ class Runner:
 
          #Initialize Logger
         if (self.config["logging"]):
+            log_path = os.path.join(
+                self.config.get("log_dir", "./"),
+                f"{self.client_id}_{cut_layer}_"
+                f"{self.config['epoch']}_{self.config['round']}_"
+                f"{self.config['batch_size']}_{self.config['device']}.log"
+            )
             logging.basicConfig(
-                filename=(
-                    f"{self.client_id}_{cut_layer}_"
-                    f"{self.config['epoch']}_{self.config['round']}_"
-                    f"{self.config['batch_size']}_{self.config['device']}.log"
-                ),
+                filename=log_path,
                 format='%(asctime)s %(message)s',
                 filemode='a'
                 )
@@ -110,6 +112,9 @@ class Runner:
                 sampler = None
                 shuffle = True
 
+                testset = trainset = torchvision.datasets.CIFAR10(root='./data', train=False,
+                                                    download=True, transform=transformer)
+
             case 's': #Use pre-defined split data
                 if os.path.exists(output_file+str(self.client_id)):
                     os.remove(output_file+str(self.client_id))
@@ -125,6 +130,23 @@ class Runner:
                 sampler = None
                 shuffle = True
 
+                test_file = output_file.replace(".pkl", "_test.pkl")
+                test_file_tmp = f"tmp_{self.client_id}_{output_file.replace(".pkl", "_test.pkl")}"
+
+                if os.path.exists(test_file_tmp):
+                    os.remove(test_file_tmp)
+                print(f"{self.config["data_server"]["server_address"]}/{test_file}")
+
+                urllib.request.urlretrieve(
+                    f"{self.config["data_server"]["server_address"]}/{test_file}",
+                    test_file_tmp
+                    )
+
+                with open(test_file_tmp, 'rb') as handle:
+                    testset = pickle.load(handle)
+                
+                testset = TransformedDataset(testset, transformer)
+
             case '_': #Split into 'split_type' number of blocks.
                 trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
                                                     download=True, transform=transformer)
@@ -138,6 +160,9 @@ class Runner:
                 sampler = torch.utils.data.SubsetRandomSampler(use_indices)
                 shuffle=False
 
+                testset = torchvision.datasets.CIFAR10(root='./data', train=False,
+                                    download=True, transform=transformer)
+
 
         trainloader = torch.utils.data.DataLoader(trainset, 
                                         batch_size=batch_size,
@@ -145,6 +170,13 @@ class Runner:
                                         sampler = sampler,
                                         num_workers=2,
                                         persistent_workers=True)
+        
+        testloader = torch.utils.data.DataLoader(testset,
+                                            batch_size=batch_size,
+                                            shuffle=False,
+                                            num_workers=0,
+                                            persistent_workers=False
+        )
         datasetsize_used = len(trainloader.dataset)
 
 
@@ -242,6 +274,13 @@ class Runner:
             names = socket.recv()
             round_received_from_split += len(names)
 
+            #send length of test set
+            test_iters = len(testloader)
+            send_test_iters = str(test_iters).encode()
+            socket.send(send_test_iters)
+
+            socket.recv()
+
 
             for epoch in range(num_epochs):
                 logging.info(f"\n********EPOCH {epoch}********\n")
@@ -311,6 +350,34 @@ class Runner:
 
                     #BATCH OVER
 
+                #======= TEST SET ========
+                bar = tqdm(testloader, desc=f"testset: ", unit='', ascii=True,
+                           bar_format='{desc} {n_fmt}/{total_fmt} {percentage:3.0f}%|{bar}| {postfix}')
+                client_model.eval()
+
+                with torch.no_grad():
+                    for data in bar:
+                        inputs, labels = data[0].to(device), data[1].to(device)
+                        
+                        #send labels to server
+                        bytes_labels = convert.array_to_bytes(labels.cpu())
+                        socket.send(bytes_labels)
+
+                        ##dummy......
+                        names = socket.recv()
+
+                        #forward prop and sending activations to server
+                        activations = client_model(inputs)
+                        server_inputs = activations.detach().clone()
+                        bytes_server_inputs = convert.array_to_bytes(server_inputs.cpu())                    
+                        
+                        server_work_time_start = time.time()
+                        socket.send(bytes_server_inputs)
+
+                        socket.recv()
+                
+                client_model.train()
+
                 #Logging and telemetry
                 epoch_end_time = time.time()
                 total_one_epoch_time = epoch_end_time - epoch_start_time
@@ -338,8 +405,9 @@ class Runner:
             socket.close()
             context.term()
 
-            model_save_name = (
-                f"./cc_client_thread_model_r{r}_{self.client_id}_{split_port}_"
+            model_save_name = os.path.join(
+                self.config.get("model_dir", "./"),
+                f"cc_client_thread_model_r{r}_{self.client_id}_{split_port}_"
                 f"{self.config['device']}_{cut_layer}_{self.config['epoch']}_"
                 f"{self.config['split_type']}_{self.client_id}_{self.config['batch_size']}_"
                 f"{self.config['round']}_{fed_port}.pt"
@@ -397,15 +465,8 @@ class Runner:
             socket1.send(send_cut_layer_size)
             round_sent_to_fed += len(send_cut_layer_size)
 
-            ## dummy recv
-            names = socket1.recv()
-            round_received_from_fed += len(names)
-
             del weights
             del bytes_weights
-
-            socket1.close()
-            context1.term()
 
             '''
             ====================================================        
@@ -413,25 +474,17 @@ class Runner:
             ====================================================
             '''
 
-            context2 = zmq.Context()
-            print("Connecting to fed_avg server to recv global weights…")
-
             weights_waiting_start_time = time.time()
-            socket2 = context2.socket(zmq.REQ)
-            url = str(self.config["fed_server"]["server_ip"]) + ":"+ str(fed_port)
-            socket2.connect(url)
-
-            msg = "send_global_weights" #TODO: Minimize this message to reduce slight message size overhead
-            send_msg = msg.encode()
-            socket2.send(send_msg)
-            round_sent_to_fed += len(send_msg)
-
-            global_weights = socket2.recv()
+            
+            global_weights = socket1.recv()
             round_received_from_fed += len(global_weights)
 
             weights_waiting_end_time = time.time()
             weights_waiting_time = weights_waiting_end_time - weights_waiting_start_time
             weights_total_waiting_time += weights_waiting_time
+
+            socket1.close()
+            context1.term()
 
             #Receive weights communication time
             print(f"CLIENT_WEIGHTS_WAITING_TIME = {weights_waiting_time}")
@@ -472,8 +525,6 @@ class Runner:
             total_received_from_split += round_received_from_split
             total_received_from_fed += round_received_from_fed
 
-            socket2.close()
-            context2.term()
 
             #END ROUND
 

@@ -2,8 +2,7 @@ matplotlib==3.10.3
 numpy==2.3.1
 Pillow==11.2.1
 PyYAML==6.0.2
-PyYAML==6.0.2
 pyzmq==27.0.0
-torch==2.6.0+cu126
-torchvision==0.21.0+cu126
+#torch==2.6.0+cu126
+#torchvision==0.21.0+cu126
 tqdm==4.66.5

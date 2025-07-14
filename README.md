@@ -125,6 +125,27 @@ Dependencies:
 - sysstat
 
 
+## Docker Setup
+
+1. Dockerfile  
+The Dockerfile is found in the /src/ folder, and contains all model code when built.
+Line 5 of the file installs torch and torchvision with a cuda wheel. This line may need to be
+changed depending on the hardware available to the docker engine.
+
+2. docker-compose
+A docker-compose file can be found in the repository root. This file starts up the Split Server, the Fed server, and as many clients as are listed.
+
+Of note within this docker-compose file:
+- Expects there to be a config.yaml file in the repo root folder. This is the config that will be used by all the containers. Within /src/ there is a dummy config.yaml that ensures a folder called "config.yaml" isn't created when docker attempts to create a link to the config on the host.
+- Expects the project to have a /logs/ folder where logs will be output to.
+- Additional clients can be added by copying and pasting the client template. Command lines should be modified as usual.
+
+3. Data server
+The data server is expected to be hosted locally on the host. See the section on Splitting Data.
+
+
+
+
 ## References
 <a id="1">[1]</a> 
 Vepakomma P, Gupta O, Swedish T, Raskar R. Split learning for health: Distributed deep learning without sharing raw patient data. arXiv preprint arXiv:1812.00564. 2018 Dec 3.

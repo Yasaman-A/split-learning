@@ -29,6 +29,7 @@ from ..lib import convert
 from .custom_model_avg import custom_model_avg
 import yaml
 import logging
+import os
 # from objsize import get_deep_size
 
 
@@ -57,11 +58,13 @@ class Runner:
 
                #Initialize Logger
         if (self.config["logging"]):
+            log_path = os.path.join(
+                self.config.get("log_dir", "./"),
+                f"./sf_server_{client_total}_{split_port}_{device}_"
+                f"{self.server_cut_layer_list}_{epochs}_{rnd}.log"
+            )
             logging.basicConfig(
-                filename=(
-                    f"./sf_server_{client_total}_{split_port}_{device}_"
-                    f"{self.server_cut_layer_list}_{epochs}_{rnd}.log"
-                ),
+                filename=log_path,
                 format='%(asctime)s %(message)s',
                 filemode='a'
             )
@@ -142,6 +145,11 @@ class Runner:
             send_msg = msg.encode()
             socket.send(send_msg)
 
+            
+            #get length of test set
+            test_iters = int(socket.recv().decode())
+            socket.send(send_msg)
+
             num_epochs = epochs
 
             round_start_time = time.time()
@@ -190,6 +198,50 @@ class Runner:
                     logging.info(f"***TH - {thread_no}***  SERVER_TOTAL_ONE_STEP_TIME = {total_one_step_time:.3f}, loss: {loss.item():.3f}")
 
 
+
+                ################################################################################
+                # TEST SET
+
+                server_model.eval()
+
+                correct = 0
+                total = 0
+
+                with torch.no_grad():
+                    for j in range(test_iters):
+                        #receive labels
+                        recv_labels = socket.recv()
+                        numpy_labels = convert.bytes_to_array(recv_labels)
+                        labels = torch.from_numpy(numpy_labels)
+                        labels = labels.to(device)
+
+                        ##dummy......
+                        socket.send(send_msg)
+
+                        #get client activations
+                        recv_serv_inputs = socket.recv()
+                        numpy_server_inputs = convert.bytes_to_array(recv_serv_inputs)
+                        server_inputs = torch.from_numpy(numpy_server_inputs)
+                        server_inputs = server_inputs.to(device)
+
+                        #dummy
+                        socket.send(send_msg)
+
+                        #forward pass
+                        server_inputs = Variable(server_inputs, requires_grad=True)
+                        outputs = server_model(server_inputs)
+
+                        _, predicted = torch.max(outputs.data, 1)
+                        correct += (predicted == labels).sum().item()
+                        total += labels.size(0)
+                    
+                    accuracy = 100 * correct / total if total > 0 else 0
+                    print(f" ***TH - {thread_no}*** Accuracy on test set for round {r} epoch {epoch}: {accuracy}%")
+                    logging.info(f"***TH - {thread_no}*** Accuracy on test set for round {r} epoch {epoch}: {accuracy}%")
+                    server_model.train()
+
+
+
                     ################################################################################
 
                 epoch_end_time = time.time()
@@ -207,8 +259,9 @@ class Runner:
             server_weights.append(server_model.state_dict())
             datasetsize_server.append(dataset_size)
 
-            model_save_name = (
-                f"./server_thread_model_r{r}_{thread_no}_{client_total}_"
+            model_save_name = os.path.join(
+                self.config.get("model_dir", "./"),
+                f"server_thread_model_r{r}_{thread_no}_{client_total}_"
                 f"{split_port}_{device}_{cut_layer}_{epochs}.pt"
             )
             torch.save(server_model.state_dict(), model_save_name)
@@ -268,8 +321,9 @@ class Runner:
                 # Server models weighted averaging..
                 server_global_weights, server_global_exposure = custom_model_avg(True, server_weights, datasetsize_server, self.server_cut_layer_list)
 
-                model_save_name = (
-                    f"./server_fedAvg_model_r{r}_{client_total}_{split_port}_"
+                model_save_name = os.path.join(
+                    self.config.get("model_dir", "./"),
+                    f"server_fedAvg_model_r{r}_{client_total}_{split_port}_"
                     f"{device}_{self.server_cut_layer_list}_{epochs}_{rnd}.pt"
                 )
 
@@ -301,7 +355,7 @@ class Runner:
 
             fed_socket.close()
             fed_context.term()
-            print("socket closed)")
+            print("socket closed")
 
             training_end_time = time.time()
             training_time = training_end_time - training_start_time
