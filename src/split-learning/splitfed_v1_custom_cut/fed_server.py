@@ -189,7 +189,8 @@ class Runner:
                 )
                 torch.save(client_global_weights, model_save_name)
                 print("MODEL_SAVED.")
-
+                logging.info("MODEL SAVED.")
+                
                 event.set() #workers will send data back to clients
 
                 for no, thread in enumerate(thrs):  # have to check when it will run all epochs..

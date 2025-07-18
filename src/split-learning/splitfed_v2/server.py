@@ -5,25 +5,18 @@ arg1 --> CONFIG_FILE_PATH
 
 # eg command: python server_splitnn_th_REPREQ.py 2 5555 cpu
 
-import copy
-import threading
-import torchvision
-import torchvision.transforms as transforms
 import torch.nn as nn
-import torch.nn.functional as F
 from torchvision import models
-from torchvision.models import ResNet18_Weights
 import torch.optim as optim
 from torch.autograd import Variable
 import time
 import zmq
 import torch
 from ..lib import convert
-import sys
 import random
 import yaml
 import logging
-# from objsize import get_deep_size
+import os
 
 
 class Runner:
@@ -46,11 +39,13 @@ class Runner:
 
                #Initialize Logger
         if (self.config["logging"]):
-            logging.basicConfig(
-                filename=(
+            log_path = os.path.join(
+                    self.config.get("log_dir", "./"),
                     f"./sf_server_{client_total}_{split_port}_{device}_"
                     f"{self.cut_layer}_{epochs}_{rnd}.log"
-                ),
+                    )
+            logging.basicConfig(
+                filename=log_path,
                 format='%(asctime)s %(message)s',
                 filemode='a'
             )
@@ -76,7 +71,6 @@ class Runner:
                     self.cut_layer = config["cut_layer"]
 
                     self.model = models.resnet18(weights=None)
-                    self.replace_batch_with_group_norm(self.model, num_groups=32)
 
                     num_ftrs = self.model.fc.in_features
                     self.model.fc = nn.Sequential(nn.Flatten(),
@@ -94,15 +88,6 @@ class Runner:
                 
                 def change_cut(self, cut_layer):
                     self.cut_layer = cut_layer
-                
-                def replace_batch_with_group_norm(self, module, num_groups = 32):
-                    for name, child in module.named_children():
-                        if isinstance(child, nn.BatchNorm2d):
-                            num_channels = child.num_features
-                            gn = nn.GroupNorm(num_groups=min(num_groups, num_channels), num_channels=num_channels)
-                            setattr(module, name, gn)
-                        else:
-                            self.replace_batch_with_group_norm(child, num_groups=num_groups)
 
             model_config = {"cut_layer": self.cut_layer, "logits" : 10}
             server_model = ResNet18Server(model_config).to(device)
@@ -164,10 +149,8 @@ class Runner:
 
                         epoch_start_time = time.time()
 
-                        # server_optimizer = optim.SGD(
-                        #     server_model.parameters(), lr=0.01, momentum=0.9)
-
-                        server_optimizer = optim.Adam(server_model.parameters(), lr=0.001)
+                        server_optimizer = optim.SGD(
+                            server_model.parameters(), lr=0.01, momentum=0.9)
 
                         for j in range(recv_iterations):
                             step_start_time = time.time()
@@ -196,10 +179,10 @@ class Runner:
                                 probs = torch.softmax(outputs, dim=1)
                                 avg_conf = probs.max(dim=1).values.mean().item()
                                 if avg_conf > 0.6:
-                                    print(f"[Round: {round}, Epoch: {epoch}] Avg softmax confidence: {avg_conf:.4f}")
+                                    print(f"[Round: {r}, Epoch: {epoch}] Avg softmax confidence: {avg_conf:.4f}")
                                 entropy = -(probs * probs.log()).sum(dim=1).mean().item()
                                 if entropy < 1:
-                                    print(f"[Round: {round}, Epoch {epoch}] Prediction entropy: {entropy:.4f}")
+                                    print(f"[Round: {r}, Epoch {epoch}] Prediction entropy: {entropy:.4f}")
 
 
                             server_optimizer.zero_grad()
@@ -207,7 +190,7 @@ class Runner:
                             loss.backward()
 
                             if loss.item() < 0.5:
-                                print(f"[Round: {round}, Epoch {epoch}] Loss: {loss.item():.6f}")
+                                print(f"[Round: {r}, Epoch {epoch}] Loss: {loss.item():.6f}")
 
                             #send gradients back to client
                             transfer_loss = server_inputs.grad.clone().detach()
@@ -248,7 +231,8 @@ class Runner:
                     print("All clients served..")
 
 
-                model_save_name = (
+                model_save_name = os.path.join(
+                    self.config.get("model_dir", "./"),
                     f"./server_fedAvg_model_r{r}_{client_total}_{split_port}_"
                     f"{device}_{self.cut_layer}_{epochs}_{rnd}.pt"
                 )

@@ -26,7 +26,7 @@ class ResNet18Client(nn.Module):
                 break
             x = l(x)
         return x
-
+    
 
 class ResNet18Server(nn.Module):
     def __init__(self, cut_layer):
@@ -45,7 +45,8 @@ class ResNet18Server(nn.Module):
             if i <= self.cut_layer:
                 continue
             x = l(x)
-        return x 
+        return x
+
     
     ''' Classify(x)
     Minor helper function that softmaxes output to use when classifying output.
@@ -210,15 +211,18 @@ def plot_convergence_split_model(device):
     import matplotlib.pyplot as plt
 
     root = "./"#convergence/v1_med"
+    #root = "./docker experiments/same 5,6,7/models/"
     client = ""
     server = ""
 
-    server_fmt = "server_fedAvg_model_r{}_6_5555_cuda_[2, 3, 4, 2, 3, 4]_3_35.pt"
-    client_fmt = "client_fedAvg_model_r{}_6_4445_35.pt"
+    #server_fmt = "server_fedAvg_model_r{}_3_5555_cuda_[5, 6, 7]_3_35.pt"
+    server_fmt = "server_fedAvg_model_r{}_6_5555_cuda_5_15.pt"
+    client_fmt = "client_fedAvg_model_r{}_6_4445_15.pt"
+    #client_fmt = "client_fedAvg_model_r{}_3_4445_35.pt"
 
     accuracies = []
-    cut_layer = 4
-    rounds = 28
+    cut_layer = 5
+    rounds = 15
 
     for round_num in range(rounds):
         print("======================================================")
@@ -350,6 +354,6 @@ if __name__ == "__main__":
 
     plot_convergence_split_model(device)
 
-    predict_with_combined_model(model_path, device)
+    #predict_with_combined_model(model_path, device)
 
 

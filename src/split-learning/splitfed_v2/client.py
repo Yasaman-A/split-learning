@@ -56,18 +56,20 @@ class Runner:
 
 
         if (self.config["logging"]):
-                    logging.basicConfig(
-                        filename=(
-                            f"{self.client_id}_{self.config['cut_layer']}_"
-                            f"{self.config['epoch']}_{self.config['round']}_"
-                            f"{self.config['batch_size']}_{self.config['device']}.log"
-                        ),
-                        format='%(asctime)s %(message)s',
-                        filemode='a'
-                        )
-                    logger = logging.getLogger()
-                    # Setting the threshold of logger to DEBUG
-                    logger.setLevel(logging.INFO)
+            log_path = os.path.join(
+                self.config.get("log_dir", ",/"),
+                f"{self.client_id}_{self.config['cut_layer']}_"
+                f"{self.config['epoch']}_{self.config['round']}_"
+                f"{self.config['batch_size']}_{self.config['device']}.log"
+            )
+            logging.basicConfig(
+                filename= log_path,
+                format='%(asctime)s %(message)s',
+                filemode='a'
+                )
+            logger = logging.getLogger()
+            # Setting the threshold of logger to DEBUG
+            logger.setLevel(logging.INFO)
 
         if(self.config["device"] == 'cpu'):
             device = 'cpu'
@@ -142,7 +144,6 @@ class Runner:
                 self.logits = config["logits"]
 
                 self.model = models.resnet18(weights=None)
-                self.replace_batch_with_group_norm(self.model, num_groups=32)
 
                 num_ftrs = self.model.fc.in_features
                 self.model.fc = nn.Sequential(nn.Flatten(),
@@ -158,22 +159,14 @@ class Runner:
                     x = l(x)
                 return x
             
-            def replace_batch_with_group_norm(self, module, num_groups = 32):
-                for name, child in module.named_children():
-                    if isinstance(child, nn.BatchNorm2d):
-                        num_channels = child.num_features
-                        gn = nn.GroupNorm(num_groups=min(num_groups, num_channels), num_channels=num_channels)
-                        setattr(module, name, gn)
-                    else:
-                        self.replace_batch_with_group_norm(child, num_groups=num_groups)
 
         config = {"cut_layer": self.config["cut_layer"], "logits": 10}
         client_model = ResNet18Client(config).to(device)
 
-        # client_optimizer = optim.SGD(
-        #     client_model.parameters(), lr=0.01, momentum=0.9)
+        client_optimizer = optim.SGD(
+            client_model.parameters(), lr=0.01, momentum=0.9)
 
-        client_optimizer = optim.Adam(client_model.parameters(), lr=0.001)
+        #client_optimizer = optim.Adam(client_model.parameters(), lr=0.001)
 
         training_start_time = time.time()
         num_rounds = rnd
@@ -184,9 +177,9 @@ class Runner:
             if r > 0:
                 client_model.load_state_dict(global_numpy_weights)
                 print("GLOBAL_CLIENT_WEIGHTS_LOADED")
+                logging.info("GLOBAL CLIENT WEIGHTS LOADED")
                 del global_numpy_weights
 
-            
             for epoch in range(num_epochs):
                 context = zmq.Context()
 
@@ -213,7 +206,6 @@ class Runner:
 
 
                 epoch_start_time = time.time()
-                running_loss = 0.0
 
                 bar = tqdm(trainloader, desc=f"{r} {epoch}", unit='', ascii=True,
                            bar_format='{desc} {n_fmt}/{total_fmt} {percentage:3.0f}%|{bar}| {postfix}')
@@ -224,7 +216,6 @@ class Runner:
                     #send labels to server
                     bytes_labels = convert.array_to_bytes(labels.cpu())
                     socket.send(bytes_labels)
-                    # print("labels_sent")
 
                     socket.recv()
 
@@ -242,10 +233,6 @@ class Runner:
                     numpy_grad = convert.bytes_to_array(recv_grad)
                     grad_output = torch.from_numpy(numpy_grad)
                     grad_output = grad_output.to(device)
-
-                    # print(f"=====epoch {epoch} =======")
-                    # print(grad_output)
-                    # print("==================")
                     
                     client_optimizer.zero_grad()
                     activations.backward(gradient=grad_output)
@@ -300,38 +287,16 @@ class Runner:
 
             ## send dataset size for weighted avg
             socket1.send(send_dataset_size)
-            socket1.recv()
 
-            del weights
-            del bytes_weights
-
-            socket1.close()
-            context1.term()
-
-            #############################################################
-            ######### Recieving global model from fedServer #############
-            #############################################################
-
-            context2 = zmq.Context()
-
-            print("Connecting to fed_avg server to recv global weights…")
-            socket2 = context2.socket(zmq.REQ)
-            
-            url = self.config["fed_server"]["server_ip"] + ":" + str(self.config["fed_server"]["server_start_port"] + self.client_id - 1)
-            socket2.connect(url)
-
-            msg = "send_global_weights"
-            send_msg = msg.encode()
-            socket2.send(send_msg)
-
-            global_weights = socket2.recv()
+            #recieve federated model
+            global_weights = socket1.recv()
 
             print("Size of global model weights (before) in bytes is:", getsizeof(global_weights))
             global_numpy_weights = convert.bytes_to_dict(global_weights)
             print("Size of global model weights (after) in bytes is:", getsizeof(global_numpy_weights))
 
-            socket2.close()
-            context2.term()
+            socket1.close()
+            context1.term()
 
             #END ROUND
 

@@ -1,12 +1,10 @@
-logging: false
-log_steps: 50
+logging: True
 #cpu OR gpu
-device: cpu
-client_total: 2
-#cut_layer: 3
-epoch: 1
-round: 1
-batch_size: 128
+device: gpu
+client_total: 6
+epoch: 5
+round: 15
+batch_size: 32
 # n for no_split, s: for getting split i from data server, Any number for the number of i.i.d splits.
 split_type: s
 split_server: 
@@ -17,4 +15,4 @@ fed_server:
   server_start_port: 4445
 data_server:
   server_address: http://127.0.0.1:8000
-  output_file: output.pickle
+  output_file: output.pkl
