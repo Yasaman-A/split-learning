@@ -38,8 +38,8 @@ class ResNet18Server(nn.Module):
 
     def __init__(self, config):
         super(ResNet18Server, self).__init__()
-        self.logits = config["logits"]
-        self.cut_layer = config["cut_layer"]
+        self.logits = config['logits']
+        self.cut_layer = config['cut_layer']
 
         self.model = models.resnet18(weights=None)
         
@@ -73,12 +73,12 @@ class Runner:
         self.server_cut_layer_list = [int(x) for x in extra.split(",")] 
 
     def run(self):
-        client_total = self.config["client_total"]
-        split_port = self.config["split_server"]["server_start_port"]
-        device = self.config["device"]
-        #cut_layer = self.config["cut_layer"]
-        epochs = self.config["epoch"]
-        rnd = self.config["round"]
+        client_total = self.config['client_total']
+        split_port = self.config['split_server']['server_start_port']
+        device = self.config['device']
+        #cut_layer = self.config['cut_layer']
+        epochs = self.config['epoch']
+        rnd = self.config['round']
 
         if(device != 'cpu'):
             device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -86,7 +86,7 @@ class Runner:
 
 
                #Initialize Logger
-        if (self.config["logging"]):
+        if (self.config['logging']):
             log_path = os.path.join(
                 self.config.get("log_dir", "./"),
                 f"./sf_server_{client_total}_{split_port}_{device}_"
@@ -353,7 +353,7 @@ class Runner:
                 print("All threads ended..")
 
                 fed_context = zmq.Context()
-                fed_url = f"{self.config["fed_server"]["server_ip"]}:{self.config["fed_server"]["server_start_port"] + client_total}"
+                fed_url = f"{self.config['fed_server']['server_ip']}:{self.config['fed_server']['server_start_port'] + client_total}"
                 fed_socket = fed_context.socket(zmq.REP)
                 fed_socket.connect(fed_url)
                 print(f"Connected on {fed_url}")
@@ -361,13 +361,13 @@ class Runner:
                 fed_iters = int(fed_socket.recv().decode())
                 fed_socket.send(b"a")
                 
-                config = {"cut_layer": self.config["test_cut_layer"], "logits": 10}
+                config = {"cut_layer": self.config['test_cut_layer'], "logits": 10}
                 fed_model = ResNet18Server(config).to(device)
 
                 correct = 0
                 total = 0
-                correct_per_class = torch.zeros(config["logits"], dtype=torch.long)
-                total_per_class   = torch.zeros(config["logits"], dtype=torch.long)
+                correct_per_class = torch.zeros(config['logits'], dtype=torch.long)
+                total_per_class   = torch.zeros(config['logits'], dtype=torch.long)
 
                 eval_time_start = time.perf_counter()
 
@@ -399,12 +399,12 @@ class Runner:
                         correct += (predicted == labels).sum().item()
                         total += labels.size(0)
 
-                        for class_idx in range(config["logits"]):
+                        for class_idx in range(config['logits']):
                             mask = (labels == class_idx)
                             total_per_class[class_idx] += mask.sum().item()
                             correct_per_class[class_idx] += (predicted[mask] == class_idx).sum().item()
 
-                accuracy = correct / total if total > 0 else 0
+                accuracy = (correct / total) * 100 if total > 0 else 0
                 per_class_accuracy = correct_per_class.float() / total_per_class.clamp(min=1)
 
                 print("Class\tAccuracy")
@@ -427,7 +427,7 @@ class Runner:
 
                 fed_socket.recv()
 
-                if patience >= self.config["patience"]:
+                if patience >= self.config['patience']:
                     self.terminate = True
                     print("Patience has run out. Ending experiment.")
                     logging.info("Patience has run out. Ending experiment.")
@@ -449,7 +449,7 @@ class Runner:
             ############################ legacy code
             # print("Sending to fed server...")
             # fed_context = zmq.Context()
-            # fed_url = f"{self.config["fed_server"]["server_ip"]}:{self.config["fed_server"]["server_start_port"] + client_total}"
+            # fed_url = f"{self.config['fed_server']['server_ip']}:{self.config['fed_server']['server_start_port'] + client_total}"
             # fed_socket = fed_context.socket(zmq.REQ)
             # fed_socket.connect(fed_url)
             # print(f"Connected on {fed_url}")
