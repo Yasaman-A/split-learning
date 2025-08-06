@@ -48,27 +48,27 @@ class Runner:
             print("Read successful")
     
     def run(self):
-        client_total = self.config["client_total"]
-        fed_port = self.config["fed_server"]["server_start_port"]
-        rnd = self.config["round"]
+        client_total = self.config['client_total']
+        fed_port = self.config['fed_server']['server_start_port']
+        rnd = self.config['round']
 
 
         ##################################################################
         #Code to enable ad-hoc testing 
-        if(self.config["device"] == 'cpu'):
+        if(self.config['device'] == 'cpu'):
             device = 'cpu'
         else:
             device = torch.device(
                 'cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 
-        output_file = self.config["data_server"]["output_file"]
+        output_file = self.config['data_server']['output_file']
         test_file = output_file.replace(".pkl", "_test.pkl")
         test_file_tmp = f"tmp_fed_{test_file}"
-        cut_layer = self.config["test_cut_layer"]
+        cut_layer = self.config['test_cut_layer']
 
         urllib.request.urlretrieve(
-            f"{self.config["data_server"]["server_address"]}/{test_file}",
+            f"{self.config['data_server']['server_address']}/{test_file}",
             test_file_tmp
             )
 
@@ -86,7 +86,7 @@ class Runner:
         testset = TransformedDataset(testset, transform=transformer)
         
         testloader = torch.utils.data.DataLoader(testset,
-                                    batch_size=self.config["batch_size"],
+                                    batch_size=self.config['batch_size'],
                                     shuffle=False,
                                     num_workers=0,
                                     persistent_workers=False
@@ -96,7 +96,7 @@ class Runner:
 
             def __init__(self, config):
                 super(ResNet18Client, self).__init__()
-                self.logits = config["logits"]
+                self.logits = config['logits']
                 self.cut_layer = cut_layer
 
                 self.model = models.resnet18(weights=None)
@@ -119,7 +119,7 @@ class Runner:
 
         ##################################################################
 
-        if (self.config["logging"]):
+        if (self.config['logging']):
             log_path = os.path.join(
                 self.config.get("log_dir", "./"),
                 f"./cc_fed_server_{client_total}_{fed_port}_{rnd}.log"
@@ -296,7 +296,7 @@ class Runner:
                 
                 logging.info("All threads joined.")
                 
-                if self.config["device"] != "cpu":
+                if self.config['device'] != "cpu":
                     time.sleep(1) #gpu is too fast for ZMQ; race condition occurs and fed server terminates.
 
                 print("All threads ended..")

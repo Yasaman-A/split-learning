@@ -25,11 +25,11 @@ class Runner:
             print("Read successful")
     
     def run(self):
-        client_total = self.config["client_total"]
-        fed_port = self.config["fed_server"]["server_start_port"]
-        rnd = self.config["round"]
+        client_total = self.config['client_total']
+        fed_port = self.config['fed_server']['server_start_port']
+        rnd = self.config['round']
 
-        if (self.config["logging"]):
+        if (self.config['logging']):
             log_path = os.path.join(
                 self.config.get("log_dir", "./"),
                 f"./fed_server_{client_total}_{fed_port}_{rnd}.log"
@@ -209,7 +209,7 @@ class Runner:
                 
                 logging.info("All threads joined.")
                 
-                if self.config["device"] != "cpu":
+                if self.config['device'] != "cpu":
                     time.sleep(1) #gpu is too fast for ZMQ; race condition occurs and fed server terminates.
 
                 print("All threads ended..")

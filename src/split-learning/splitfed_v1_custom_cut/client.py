@@ -56,13 +56,13 @@ class Runner:
     
     def run(self):
         cut_layer = self.input_cut_layer
-        split_address = self.config["split_server"]["server_ip"]
-        split_port = self.config["split_server"]["server_start_port"]+self.client_id-1
-        fed_port = self.config["fed_server"]["server_start_port"]+self.client_id-1
-        log_steps = self.config["log_steps"]
-        num_epochs = int(self.config["epoch"])
-        output_file = self.config["data_server"]["output_file"]
-        rnd = self.config["round"]
+        split_address = self.config['split_server']['server_ip']
+        split_port = self.config['split_server']['server_start_port']+self.client_id-1
+        fed_port = self.config['fed_server']['server_start_port']+self.client_id-1
+        log_steps = self.config['log_steps']
+        num_epochs = int(self.config['epoch'])
+        output_file = self.config['data_server']['output_file']
+        rnd = self.config['round']
 
         terminate = False #patience sentinel
 
@@ -117,7 +117,7 @@ class Runner:
 
 
          #Initialize Logger
-        if (self.config["logging"]):
+        if (self.config['logging']):
             log_path = os.path.join(
                 self.config.get("log_dir", "./"),
                 f"{self.client_id}_{cut_layer}_"
@@ -133,7 +133,7 @@ class Runner:
             # Setting the threshold of logger to DEBUG
             logger.setLevel(logging.INFO)
 
-        if(self.config["device"] == 'cpu'):
+        if(self.config['device'] == 'cpu'):
             device = 'cpu'
         else:
             device = torch.device(
@@ -150,10 +150,10 @@ class Runner:
             transforms.Normalize((0.4914, 0.4822, 0.4465),
                                      (0.2023, 0.1994, 0.2010))
         ])
-        batch_size = self.config["batch_size"]
+        batch_size = self.config['batch_size']
 
         #Data Splitting
-        match self.config["split_type"]:
+        match self.config['split_type']:
             case 'n': #No splitting. Use full dataset
                 trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
                                                     download=True, transform=transformer)
@@ -167,8 +167,8 @@ class Runner:
                 if os.path.exists(output_file+str(self.client_id)):
                     os.remove(output_file+str(self.client_id))
 
-                print(self.config["data_server"]["server_address"]+"/"+output_file)
-                urllib.request.urlretrieve(self.config["data_server"]["server_address"]+"/"+output_file, output_file+str(self.client_id))
+                print(self.config['data_server']['server_address']+"/"+output_file)
+                urllib.request.urlretrieve(self.config['data_server']['server_address']+"/"+output_file, output_file+str(self.client_id))
 
                 with open(output_file+str(self.client_id), 'rb') as handle:
                     datasets = pickle.load(handle)
@@ -178,15 +178,15 @@ class Runner:
                 sampler = None
                 shuffle = True
 
-                test_file = output_file.replace(".pkl", "_test.pkl")
+                test_file = output_file.replace('.pkl', '_test.pkl')
                 test_file_tmp = f"tmp_{self.client_id}_{test_file}"
 
                 if os.path.exists(test_file_tmp):
                     os.remove(test_file_tmp)
-                print(f"{self.config["data_server"]["server_address"]}/{test_file}")
+                print(f"{self.config['data_server']['server_address']}/{test_file}")
 
                 urllib.request.urlretrieve(
-                    f"{self.config["data_server"]["server_address"]}/{test_file}",
+                    f"{self.config['data_server']['server_address']}/{test_file}",
                     test_file_tmp
                     )
 
@@ -200,7 +200,7 @@ class Runner:
                                                     download=True, transform=transformer)
                 dataset_size = len(trainset)
                 total_indices = list(range(dataset_size))
-                list_of_indices = np.array_split(total_indices, int(self.config["split_type"]))
+                list_of_indices = np.array_split(total_indices, int(self.config['split_type']))
                 use_indices = list_of_indices[self.client_id]
                 datasetsize_used = len(use_indices)
                 print('use_indices:' + str(use_indices))
@@ -234,7 +234,7 @@ class Runner:
 
             def __init__(self, config):
                 super(ResNet18Client, self).__init__()
-                self.logits = config["logits"]
+                self.logits = config['logits']
                 self.cut_layer = cut_layer
 
                 self.model = models.resnet18(weights=None)
@@ -265,9 +265,9 @@ class Runner:
 
 
         initial_loading_end_time = time.perf_counter()
-        metrics["initial loading"] = initial_loading_end_time - initial_loading_start_time
-        print(f"CLIENT_INITIAL_LOADING_TIME = {metrics["initial loading"]}")
-        logging.info(f"CLIENT_INITIAL_LOADING_TIME = {metrics["initial loading"]}")
+        metrics['initial loading'] = initial_loading_end_time - initial_loading_start_time
+        print(f"CLIENT_INITIAL_LOADING_TIME = {metrics['initial loading']}")
+        logging.info(f"CLIENT_INITIAL_LOADING_TIME = {metrics['initial loading']}")
 
         running_time_start = time.perf_counter()
 
@@ -278,17 +278,17 @@ class Runner:
         '''
 
         for r in range(num_rounds):
-            metrics["round"]["running_time"]    = 0
-            metrics["round"]["training time"]   = 0
-            metrics["round"]["server work time"]= 0
-            metrics["round"]["testing time"]    = 0
-            metrics["round"]["fed wait time"]   = 0
-            metrics["round"]["init time"]       = 0
+            metrics['round']['running_time']    = 0
+            metrics['round']['training time']   = 0
+            metrics['round']['server work time']= 0
+            metrics['round']['testing time']    = 0
+            metrics['round']['fed wait time']   = 0
+            metrics['round']['init time']       = 0
 
-            metrics["round"]["sent to split"]   = 0
-            metrics["round"]["recv from split"] = 0
-            metrics["round"]["sent to fed"]     = 0
-            metrics["round"]["recv from fed"]   = 0
+            metrics['round']['sent to split']   = 0
+            metrics['round']['recv from split'] = 0
+            metrics['round']['sent to fed']     = 0
+            metrics['round']['recv from fed']   = 0
 
             round_running_start = time.perf_counter()
             round_init_start = time.perf_counter()
@@ -325,18 +325,18 @@ class Runner:
             print(iterations)
             send_iterations = str(iterations).encode()
             socket.send(send_iterations)
-            metrics["round"]["sent to split"] += len(send_iterations)
+            metrics['round']['sent to split'] += len(send_iterations)
 
             names = socket.recv()
-            metrics["round"]["recv from split"] += len(names)
+            metrics['round']['recv from split'] += len(names)
 
             print(datasetsize_used)
             send_dataset_size = str(datasetsize_used).encode()
             socket.send(send_dataset_size)
-            metrics["round"]["sent to split"] += len(send_dataset_size)
+            metrics['round']['sent to split'] += len(send_dataset_size)
 
             names = socket.recv()
-            metrics["round"]["recv from split"] += len(names)
+            metrics['round']['recv from split'] += len(names)
 
             #send length of test set
             test_iters = len(testloader)
@@ -346,19 +346,19 @@ class Runner:
             socket.recv()
 
             round_init_end = time.perf_counter()
-            metrics["round"]["init time"] = round_init_end - round_init_start
+            metrics['round']['init time'] = round_init_end - round_init_start
 
 
             for epoch in range(num_epochs):
                 logging.info(f"\n********EPOCH {epoch}********\n")
                 
-                metrics["epoch"]["running time"]     = 0
-                metrics["epoch"]["training time"]    = 0
-                metrics["epoch"]["testing time"]     = 0
-                metrics["epoch"]["server work time"] = 0
+                metrics['epoch']['running time']     = 0
+                metrics['epoch']['training time']    = 0
+                metrics['epoch']['testing time']     = 0
+                metrics['epoch']['server work time'] = 0
                 
-                metrics["epoch"]["sent to split"] = 0
-                metrics["epoch"]["recv from split"] = 0
+                metrics['epoch']['sent to split'] = 0
+                metrics['epoch']['recv from split'] = 0
 
                 epoch_running_start = time.perf_counter()
                 
@@ -372,12 +372,12 @@ class Runner:
 
                     bytes_labels = convert.array_to_bytes(labels.cpu())
                     socket.send(bytes_labels)
-                    metrics["epoch"]["sent to split"] += len(bytes_labels)
+                    metrics['epoch']['sent to split'] += len(bytes_labels)
 
 
                     ##dummy......
                     names = socket.recv()
-                    metrics["epoch"]["recv from split"] += len(names)
+                    metrics['epoch']['recv from split'] += len(names)
 
 
                     #forward prop and sending activations to server
@@ -387,11 +387,11 @@ class Runner:
                     
                     server_work_time_start = time.perf_counter()
                     socket.send(bytes_server_inputs)
-                    metrics["epoch"]["sent to split"] += len(bytes_server_inputs)
+                    metrics['epoch']['sent to split'] += len(bytes_server_inputs)
 
                     #recover gradient from server
                     recv_grad = socket.recv()
-                    metrics["epoch"]["recv from split"] += len(recv_grad)
+                    metrics['epoch']['recv from split'] += len(recv_grad)
                     server_work_time_end = time.perf_counter()
 
                     numpy_grad = convert.bytes_to_array(recv_grad)
@@ -411,11 +411,11 @@ class Runner:
                     total_one_step_time = step_end_time - step_start_time
                     server_work_time = server_work_time_end - server_work_time_start
 
-                    metrics["epoch"]["server work time"] += server_work_time_end - server_work_time_start
+                    metrics['epoch']['server work time'] += server_work_time_end - server_work_time_start
 
                     bar.set_postfix({
                         "step_time": f"{total_one_step_time:.3f}",
-                        "server_time": f"{metrics["epoch"]["server work time"]:.3f}"
+                        "server_time": f"{metrics['epoch']['server work time']:.3f}"
                     })
                     logging.info(
                         f"CLIENT_TOTAL_ONE_STEP_TIME = {total_one_step_time:.3f}    , "
@@ -458,33 +458,33 @@ class Runner:
                 socket.send("acc".encode())
                 accuracy = float(socket.recv().decode())
 
-                if accuracy > metrics["best acc"]:
-                    metrics["best acc"] = accuracy
-                    metrics["best model"] = f"r{r}e{epoch}"
+                if accuracy > metrics['best acc']:
+                    metrics['best acc'] = accuracy
+                    metrics['best model'] = f"r{r}e{epoch}"
 
                 client_model.train()                
                 
                 epoch_test_end = time.perf_counter()
                 epoch_running_end = time.perf_counter()
             
-                metrics["epoch"]["running time"]  = epoch_running_end - epoch_running_start
-                metrics["epoch"]["training time"] = epoch_train_end - epoch_train_start
-                metrics["epoch"]["testing time"]  = epoch_test_end - epoch_test_start
+                metrics['epoch']['running time']  = epoch_running_end - epoch_running_start
+                metrics['epoch']['training time'] = epoch_train_end - epoch_train_start
+                metrics['epoch']['testing time']  = epoch_test_end - epoch_test_start
 
-                metrics["round"]["training time"]    += metrics["epoch"]["training time"]
-                metrics["round"]["server work time"] += metrics["epoch"]["server work time"]
-                metrics["round"]["testing time"]     += metrics["epoch"]["testing time"]
+                metrics['round']['training time']    += metrics['epoch']['training time']
+                metrics['round']['server work time'] += metrics['epoch']['server work time']
+                metrics['round']['testing time']     += metrics['epoch']['testing time']
 
 
                 
 
                 #Logging and telemetry
-                epoch_running_str  = f"Running time: {metrics["epoch"]["running time"]}"
-                epoch_training_str = f"Training time: {metrics["epoch"]["training time"]}"
-                epoch_testing_str  = f"Testing time: {metrics["epoch"]["testing time"]}"
+                epoch_running_str  = f"Running time: {metrics['epoch']['running time']}"
+                epoch_training_str = f"Training time: {metrics['epoch']['training time']}"
+                epoch_testing_str  = f"Testing time: {metrics['epoch']['testing time']}"
 
-                epoch_sent_str = f"Number of bytes sent (activations): {metrics["epoch"]["sent to split"]}"
-                epoch_recv_str = f"Number of bytes recieved (loss gradient): {metrics["epoch"]["recv from split"]}"
+                epoch_sent_str = f"Number of bytes sent (activations): {metrics['epoch']['sent to split']}"
+                epoch_recv_str = f"Number of bytes recieved (loss gradient): {metrics['epoch']['recv from split']}"
 
                 print(f"========= Client R{r} E{epoch} Statistics ==========")
                 print("Time statistics:")
@@ -506,8 +506,8 @@ class Runner:
                 logging.info(epoch_recv_str)
                 logging.info("==================================")
 
-                metrics["round"]["sent to split"]   += metrics["epoch"]["sent to split"]
-                metrics["round"]["recv from split"] += metrics["epoch"]["recv from split"]
+                metrics['round']['sent to split']   += metrics['epoch']['sent to split']
+                metrics['round']['recv from split'] += metrics['epoch']['recv from split']
                 #EPOCH OVER
 
 
@@ -536,7 +536,7 @@ class Runner:
             #  Socket to talk to server
             print("Connecting to fed_avg server to give weights…")
             socket1 = context1.socket(zmq.REQ)
-            url = str(self.config["fed_server"]["server_ip"]) + ":"+ str(fed_port)
+            url = str(self.config['fed_server']['server_ip']) + ":"+ str(fed_port)
             socket1.connect(url)
 
             weights = client_model.state_dict()
@@ -550,11 +550,11 @@ class Runner:
             
             send_weights_time_start = time.perf_counter()
             socket1.send(bytes_weights)
-            metrics["round"]["sent to fed"] += len(bytes_weights)
+            metrics['round']['sent to fed'] += len(bytes_weights)
 
             ## dummy recv
             names = socket1.recv()
-            metrics["round"]["recv from fed"] += len(names)
+            metrics['round']['recv from fed'] += len(names)
             send_weights_time_end = time.perf_counter()
 
             send_weights_time = send_weights_time_end - send_weights_time_start
@@ -563,16 +563,16 @@ class Runner:
 
             ## send dataset size for weighted avg
             socket1.send(send_dataset_size)
-            metrics["round"]["sent to fed"] += len(send_dataset_size)
+            metrics['round']['sent to fed'] += len(send_dataset_size)
 
             ## dummy recv
             names = socket1.recv()
-            metrics["round"]["recv from fed"] += len(names)
+            metrics['round']['recv from fed'] += len(names)
 
             ## send cut layer info
             send_cut_layer_size = str(cut_layer).encode()
             socket1.send(send_cut_layer_size)
-            metrics["round"]["sent to fed"] += len(send_cut_layer_size)
+            metrics['round']['sent to fed'] += len(send_cut_layer_size)
 
             del weights
             del bytes_weights
@@ -586,7 +586,7 @@ class Runner:
             weights_waiting_time_start = time.perf_counter()
             
             global_weights = socket1.recv()
-            metrics["round"]["recv from fed"] += len(global_weights)
+            metrics['round']['recv from fed'] += len(global_weights)
 
             weights_waiting_time_end = time.perf_counter()
 
@@ -595,8 +595,8 @@ class Runner:
             context1.term()
 
             round_running_end = time.perf_counter()
-            metrics["round"]["running time"] = round_running_end - round_running_start
-            metrics["round"]["fed wait time"] = weights_waiting_time_end - weights_waiting_time_start
+            metrics['round']['running time'] = round_running_end - round_running_start
+            metrics['round']['fed wait time'] = weights_waiting_time_end - weights_waiting_time_start
 
 
             
@@ -606,23 +606,23 @@ class Runner:
             global_numpy_weights = convert.bytes_to_dict(global_weights)
             print("Size of global model weights (after) in bytes is:", getsizeof(global_numpy_weights))
 
-            round_sent_to_servers = metrics["round"]["sent to fed"] + metrics["round"]["sent to split"]
-            round_rcvd_from_servers = metrics["round"]["recv from fed"] + metrics["round"]["recv from split"]
+            round_sent_to_servers = metrics['round']['sent to fed'] + metrics['round']['sent to split']
+            round_rcvd_from_servers = metrics['round']['recv from fed'] + metrics['round']['recv from split']
             round_total = round_sent_to_servers + round_rcvd_from_servers
 
-            round_running_str     = f"Running time: {metrics["round"]["running time"]}"
-            round_training_str    = f"Training time: {metrics["round"]["training time"]}"
-            round_server_work_str = f"Server work time: {metrics["round"]["server work time"]}"
-            round_testing_str     = f"Testing time: {metrics["round"]["testing time"]}"
-            round_fed_wait_str    = f"Fed wait time: {metrics["round"]["fed wait time"]}"
-            round_init_str        = f"Round Initialization Time: {metrics["round"]["init time"]}"
+            round_running_str     = f"Running time: {metrics['round']['running time']}"
+            round_training_str    = f"Training time: {metrics['round']['training time']}"
+            round_server_work_str = f"Server work time: {metrics['round']['server work time']}"
+            round_testing_str     = f"Testing time: {metrics['round']['testing time']}"
+            round_fed_wait_str    = f"Fed wait time: {metrics['round']['fed wait time']}"
+            round_init_str        = f"Round Initialization Time: {metrics['round']['init time']}"
 
-            round_sent_to_split_str   = f"Data sent to Split Server: {metrics["round"]["sent to split"]} bytes"
-            round_sent_to_fed_str     = f"Data sent to Fed Server: {metrics["round"]["sent to fed"]} bytes"
+            round_sent_to_split_str   = f"Data sent to Split Server: {metrics['round']['sent to split']} bytes"
+            round_sent_to_fed_str     = f"Data sent to Fed Server: {metrics['round']['sent to fed']} bytes"
             round_total_sent_str      = f"Total Sent: {round_sent_to_servers} bytes"
             
-            round_recv_from_split_str = f"Data received from Split Server: {metrics["round"]["recv from split"]} bytes"
-            round_recv_from_fed_str   = f"Data received from Fed Server: {metrics["round"]["recv from fed"]} bytes"
+            round_recv_from_split_str = f"Data received from Split Server: {metrics['round']['recv from split']} bytes"
+            round_recv_from_fed_str   = f"Data received from Fed Server: {metrics['round']['recv from fed']} bytes"
             round_total_recv_str      = f"Total Received: {round_rcvd_from_servers} bytes"
 
             round_total_trans_str     = f"===== \nTotal Transmitted this Round: {round_total} byes"
@@ -663,16 +663,16 @@ class Runner:
             logging.info(round_total_trans_str)
 
             
-            metrics["round init time"]     += metrics["round"]["init time"]
-            metrics["total training time"] += metrics["round"]["training time"]
-            metrics["server work time"]    += metrics["round"]["server work time"]
-            metrics["testing time"]        += metrics["round"]["testing time"]
-            metrics["fed wait time"]       += metrics["round"]["fed wait time"]
+            metrics['round init time']     += metrics['round']['init time']
+            metrics['total training time'] += metrics['round']['training time']
+            metrics['server work time']    += metrics['round']['server work time']
+            metrics['testing time']        += metrics['round']['testing time']
+            metrics['fed wait time']       += metrics['round']['fed wait time']
             
-            metrics["sent to split"]   += metrics["round"]["sent to split"]
-            metrics["recv from split"] += metrics["round"]["sent to fed"]
-            metrics["sent to fed"]     += metrics["round"]["recv from split"]
-            metrics["recv from fed"]   += metrics["round"]["recv from fed"]
+            metrics['sent to split']   += metrics['round']['sent to split']
+            metrics['recv from split'] += metrics['round']['sent to fed']
+            metrics['sent to fed']     += metrics['round']['recv from split']
+            metrics['recv from fed']   += metrics['round']['recv from fed']
            
             
 
@@ -682,10 +682,10 @@ class Runner:
 
 
         running_time_end = time.perf_counter()
-        metrics["running_time"] = running_time_end - running_time_start
+        metrics['running_time'] = running_time_end - running_time_start
 
-        total_sent_to_servers = metrics["sent to split"] + metrics["recv from split"]
-        total_rcvd_from_servers = metrics["sent to fed"] + metrics["recv from fed"]
+        total_sent_to_servers = metrics['sent to split'] + metrics['recv from split']
+        total_rcvd_from_servers = metrics['sent to fed'] + metrics['recv from fed']
         total_data_transmitted = total_sent_to_servers + total_rcvd_from_servers
 
         total_running_str         = f"Running time: {metrics['running time']}"

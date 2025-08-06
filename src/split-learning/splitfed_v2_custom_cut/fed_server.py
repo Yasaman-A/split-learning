@@ -26,8 +26,8 @@ class ResNet18Client(nn.Module):
 
     def __init__(self, config):
         super(ResNet18Client, self).__init__()
-        self.cut_layer = config["cut_layer"]
-        self.logits = config["logits"]
+        self.cut_layer = config['cut_layer']
+        self.logits = config['logits']
 
         self.model = models.resnet18(weights=None)
 
@@ -46,11 +46,11 @@ class Runner:
             print("Read successful")
     
     def run(self):
-        client_total = self.config["client_total"]
-        fed_port = self.config["fed_server"]["server_start_port"]
-        rnd = self.config["round"]
+        client_total = self.config['client_total']
+        fed_port = self.config['fed_server']['server_start_port']
+        rnd = self.config['round']
 
-        if (self.config["logging"]):
+        if (self.config['logging']):
             log_path = os.path.join(
                 self.config.get("log_dir", "./"),
                 f"./cc_fed_server_{client_total}_{fed_port}_{rnd}.log"
@@ -229,7 +229,7 @@ class Runner:
 
                 print("All threads ended..")
 
-                if self.config["device"] != 'cpu': time.sleep(0.5)
+                if self.config['device'] != 'cpu': time.sleep(0.5)
 
 
             print("All rounds ended..")

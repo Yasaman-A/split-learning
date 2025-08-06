@@ -25,8 +25,8 @@ class ResNet18Client(nn.Module):
 
     def __init__(self, config):
         super(ResNet18Client, self).__init__()
-        self.cut_layer = config["cut_layer"]
-        self.logits = config["logits"]
+        self.cut_layer = config['cut_layer']
+        self.logits = config['logits']
 
         self.model = models.resnet18(weights=None)
 
@@ -46,12 +46,12 @@ class Runner:
             print("Read successful")
     
     def run(self):
-        client_total = self.config["client_total"]
-        fed_port = self.config["fed_server"]["server_start_port"]
-        rnd = self.config["round"]
+        client_total = self.config['client_total']
+        fed_port = self.config['fed_server']['server_start_port']
+        rnd = self.config['round']
 
 
-        if (self.config["logging"]):
+        if (self.config['logging']):
             log_path = os.path.join(
                 self.config.get("log_dir", "./"),
                 f"./cc_fed_server_{client_total}_{fed_port}_{rnd}.log"
@@ -72,7 +72,7 @@ class Runner:
             """
             Returns the average of the weights.
             """
-            info = ResNet18Client({"cut_layer" : self.config["cut_layer"], "logits": 10})
+            info = ResNet18Client({"cut_layer" : self.config['cut_layer'], "logits": 10})
             
             weights_avg = copy.deepcopy(state_dicts[0])
 
@@ -87,7 +87,7 @@ class Runner:
                         weight_size_sum = 0
 
                         for state_idx, state_dict in enumerate(state_dicts):
-                            if (layer_idx <= self.config["cut_layer"]):
+                            if (layer_idx <= self.config['cut_layer']):
                                 weight_value += state_dict[key]
                                 weight_size_sum += datasizes[state_idx]
                         
@@ -222,7 +222,7 @@ class Runner:
 
                 print("All threads ended..")
 
-                if self.config["device"] != 'cpu': time.sleep(0.5)
+                if self.config['device'] != 'cpu': time.sleep(0.5)
                 
             print("All rounds ended..")
             logging.info("All rounds ended..")

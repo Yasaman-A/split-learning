@@ -23,20 +23,20 @@ class Runner:
             print("Read successful")
     
     def run(self):
-        client_total = self.config["client_total"]
-        split_port = self.config["split_server"]["server_start_port"]
-        device = self.config["device"]
-        cut_layer = self.config["cut_layer"]
-        epochs = self.config["epoch"]
-        rnd = self.config["round"]
+        client_total = self.config['client_total']
+        split_port = self.config['split_server']['server_start_port']
+        device = self.config['device']
+        cut_layer = self.config['cut_layer']
+        epochs = self.config['epoch']
+        rnd = self.config['round']
 
-        if(self.config["device"] == 'cpu'):
+        if(self.config['device'] == 'cpu'):
             device = 'cpu'
         else:
             device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
         #Initialize Logger
-        if (self.config["logging"]):
+        if (self.config['logging']):
             log_path = os.path.join(
                 self.config.get("log_dir", "./"),
                 f"./sf_server_{client_total}_{split_port}_{device}_"
@@ -92,8 +92,8 @@ class Runner:
 
                 def __init__(self, config):
                     super(ResNet18Server, self).__init__()
-                    self.logits = config["logits"]
-                    self.cut_layer = config["cut_layer"]
+                    self.logits = config['logits']
+                    self.cut_layer = config['cut_layer']
 
                     self.model = models.resnet18(weights=None)
                     

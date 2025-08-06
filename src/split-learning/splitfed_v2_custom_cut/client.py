@@ -51,17 +51,17 @@ class Runner:
         self.input_cut_layer = atoi(extra)
 
     def run(self):
-        split_address = self.config["split_server"]["server_ip"]
-        split_port = self.config["split_server"]["server_start_port"]+self.client_id-1
-        fed_port = self.config["fed_server"]["server_start_port"]+self.client_id-1
-        num_epochs = int(self.config["epoch"])
-        output_file = self.config["data_server"]["output_file"]
-        rnd = self.config["round"]
+        split_address = self.config['split_server']['server_ip']
+        split_port = self.config['split_server']['server_start_port']+self.client_id-1
+        fed_port = self.config['fed_server']['server_start_port']+self.client_id-1
+        num_epochs = int(self.config['epoch'])
+        output_file = self.config['data_server']['output_file']
+        rnd = self.config['round']
         cut_layer = self.input_cut_layer
-        batch_size = self.config["batch_size"]
+        batch_size = self.config['batch_size']
 
 
-        if (self.config["logging"]):
+        if (self.config['logging']):
             log_path = os.path.join(
                 self.config.get("log_dir", "./"),
                 f"{self.client_id}_{cut_layer}_"
@@ -77,7 +77,7 @@ class Runner:
             # Setting the threshold of logger to DEBUG
             logger.setLevel(logging.INFO)
 
-        if(self.config["device"] == 'cpu'):
+        if(self.config['device'] == 'cpu'):
             device = 'cpu'
         else:
             device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -93,10 +93,10 @@ class Runner:
             transforms.Normalize((0.4914, 0.4822, 0.4465),
                                      (0.2023, 0.1994, 0.2010))
         ])
-        batch_size = self.config["batch_size"]
+        batch_size = self.config['batch_size']
 
         #Data Splitting
-        match self.config["split_type"]:
+        match self.config['split_type']:
             case 'n': #No splitting. Use full dataset
                 trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
                                                     download=True, transform=transformer)
@@ -107,8 +107,8 @@ class Runner:
                 if os.path.exists(output_file+str(self.client_id)):
                     os.remove(output_file+str(self.client_id))
 
-                print(self.config["data_server"]["server_address"]+"/"+output_file)
-                urllib.request.urlretrieve(self.config["data_server"]["server_address"]+"/"+output_file, output_file+str(self.client_id))
+                print(self.config['data_server']['server_address']+"/"+output_file)
+                urllib.request.urlretrieve(self.config['data_server']['server_address']+"/"+output_file, output_file+str(self.client_id))
 
                 with open(output_file+str(self.client_id), 'rb') as handle:
                     datasets = pickle.load(handle)
@@ -123,7 +123,7 @@ class Runner:
                                                     download=True, transform=transformer)
                 dataset_size = len(trainset)
                 total_indices = list(range(dataset_size))
-                list_of_indices = np.array_split(total_indices, int(self.config["split_type"]))
+                list_of_indices = np.array_split(total_indices, int(self.config['split_type']))
                 use_indices = list_of_indices[self.client_id]
                 datasetsize_used = len(use_indices)
                 print('use_indices:' + str(use_indices))
@@ -145,8 +145,8 @@ class Runner:
 
             def __init__(self, config):
                 super(ResNet18Client, self).__init__()
-                self.cut_layer = config["cut_layer"]
-                self.logits = config["logits"]
+                self.cut_layer = config['cut_layer']
+                self.logits = config['logits']
 
                 self.model = models.resnet18(weights=None)
 
@@ -190,7 +190,7 @@ class Runner:
                 socket.connect(url)
                 
                 #send cut layer of this model
-                socket.send(str(config["cut_layer"]).encode())
+                socket.send(str(config['cut_layer']).encode())
 
                 socket.recv()
 
@@ -273,7 +273,7 @@ class Runner:
             #  Socket to talk to server
             print("Connecting to fed_avg server to give weights…")
             socket1 = context1.socket(zmq.REQ)
-            url = self.config["fed_server"]["server_ip"] + ":" + str(fed_port)
+            url = self.config['fed_server']['server_ip'] + ":" + str(fed_port)
             socket1.connect(url)
 
             weights = client_model.state_dict()
