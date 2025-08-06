@@ -33,12 +33,41 @@ import os
 # from objsize import get_deep_size
 
 
+class ResNet18Server(nn.Module):
+    """docstring for ResNet"""
+
+    def __init__(self, config):
+        super(ResNet18Server, self).__init__()
+        self.logits = config["logits"]
+        self.cut_layer = config["cut_layer"]
+
+        self.model = models.resnet18(weights=None)
+        
+        num_ftrs = self.model.fc.in_features
+        self.model.fc = nn.Sequential(nn.Flatten(),
+                                        nn.Linear(num_ftrs, self.logits))
+        
+        self.layers = list(self.model.children())
+
+
+    def forward(self, x):
+        for i, l in enumerate(self.layers):
+            if i <= self.cut_layer:
+                continue
+            x = l(x)
+        return x
+    
+    def classify(self, x):
+        return nn.functional.softmax(self.forward(x))
+
+
 class Runner:
     def __init__(self, config_path) -> None:
         self.server_cut_layer_list = []
         with open(config_path, "r") as yamlfile:
             self.config = yaml.load(yamlfile, Loader=yaml.FullLoader)
             print("Read successful")
+        self.terminate = False
     
     def set_extra_options(self, extra):
         self.server_cut_layer_list = [int(x) for x in extra.split(",")] 
@@ -88,34 +117,13 @@ class Runner:
 
             socket.bind(url)
 
+            socket.recv()
+            if self.terminate: 
+                socket.send(b"1")
+                socket.close()
+                return
+            else: socket.send(b"0")
 
-
-            class ResNet18Server(nn.Module):
-                """docstring for ResNet"""
-
-                def __init__(self, config):
-                    super(ResNet18Server, self).__init__()
-                    self.logits = config["logits"]
-                    self.cut_layer = cut_layer
-
-                    self.model = models.resnet18(weights=None)
-                    
-                    num_ftrs = self.model.fc.in_features
-                    self.model.fc = nn.Sequential(nn.Flatten(),
-                                                  nn.Linear(num_ftrs, self.logits))
-                    
-                    self.layers = list(self.model.children())
-
-
-                def forward(self, x):
-                    for i, l in enumerate(self.layers):
-                        if i <= self.cut_layer:
-                            continue
-                        x = l(x)
-                    return x
-                
-                def classify(self, x):
-                    return nn.functional.softmax(self.forward(x))
 
             config = {"cut_layer": cut_layer, "logits": 10}
             server_model = ResNet18Server(config).to(device)
@@ -236,6 +244,9 @@ class Runner:
                         total += labels.size(0)
                     
                     accuracy = 100 * correct / total if total > 0 else 0
+
+                    socket.recv()
+                    socket.send(str(accuracy).encode())
                     print(f" ***TH - {thread_no}*** Accuracy on test set for round {r} epoch {epoch}: {accuracy}%")
                     logging.info(f"***TH - {thread_no}*** Accuracy on test set for round {r} epoch {epoch}: {accuracy}%")
                     server_model.train()
@@ -288,7 +299,7 @@ class Runner:
             server_weights = []
             datasetsize_server = []
 
-            server_global_exposure = {} #for final aggregation
+            #server_global_exposure = {} #for final aggregation
 
             total_threads = client_total
             port_no = split_port
@@ -296,6 +307,11 @@ class Runner:
 
             num_rounds = rnd
             context = zmq.Context()
+            total_eval_time = 0
+
+            best_accuracy = 0
+            best_model = ""
+            patience = 0
 
             training_start_time = time.time()
             for r in range(num_rounds):
@@ -314,12 +330,16 @@ class Runner:
                 for thread in thrs: 
                     thread.join()
 
+                if self.terminate:
+                    break
+
                 print("Length of server weights:", len(server_weights))
                 print("Length of dataset:", len(datasetsize_server))
 
 
                 # Server models weighted averaging..
-                server_global_weights, server_global_exposure = custom_model_avg(True, server_weights, datasetsize_server, self.server_cut_layer_list)
+                        #server_global_exposure removed - unneeded.
+                server_global_weights, _ = custom_model_avg(True, server_weights, datasetsize_server, self.server_cut_layer_list)
 
                 model_save_name = os.path.join(
                     self.config.get("model_dir", "./"),
@@ -331,36 +351,133 @@ class Runner:
                 print("MODEL_SAVED.")
 
                 print("All threads ended..")
+
+                fed_context = zmq.Context()
+                fed_url = f"{self.config["fed_server"]["server_ip"]}:{self.config["fed_server"]["server_start_port"] + client_total}"
+                fed_socket = fed_context.socket(zmq.REP)
+                fed_socket.connect(fed_url)
+                print(f"Connected on {fed_url}")
+
+                fed_iters = int(fed_socket.recv().decode())
+                fed_socket.send(b"a")
+                
+                config = {"cut_layer": self.config["test_cut_layer"], "logits": 10}
+                fed_model = ResNet18Server(config).to(device)
+
+                correct = 0
+                total = 0
+                correct_per_class = torch.zeros(config["logits"], dtype=torch.long)
+                total_per_class   = torch.zeros(config["logits"], dtype=torch.long)
+
+                eval_time_start = time.perf_counter()
+
+                with torch.no_grad():
+                    for j in range(fed_iters):
+                        #receive labels
+                        recv_labels = fed_socket.recv()
+                        numpy_labels = convert.bytes_to_array(recv_labels)
+                        labels = torch.from_numpy(numpy_labels)
+                        labels = labels.to(device)
+
+                        ##dummy......
+                        fed_socket.send("a".encode())
+
+                        #get client activations
+                        recv_serv_inputs = fed_socket.recv()
+                        numpy_server_inputs = convert.bytes_to_array(recv_serv_inputs)
+                        server_inputs = torch.from_numpy(numpy_server_inputs)
+                        server_inputs = server_inputs.to(device)
+
+                        #dummy
+                        fed_socket.send("a".encode())
+
+                        #forward pass
+                        server_inputs = Variable(server_inputs, requires_grad=True)
+                        outputs = fed_model(server_inputs)
+                        _, predicted = torch.max(outputs.data, 1)
+
+                        correct += (predicted == labels).sum().item()
+                        total += labels.size(0)
+
+                        for class_idx in range(config["logits"]):
+                            mask = (labels == class_idx)
+                            total_per_class[class_idx] += mask.sum().item()
+                            correct_per_class[class_idx] += (predicted[mask] == class_idx).sum().item()
+
+                accuracy = correct / total if total > 0 else 0
+                per_class_accuracy = correct_per_class.float() / total_per_class.clamp(min=1)
+
+                print("Class\tAccuracy")
+                logging.info("Class\tAccuracy")
+                for i, acc in enumerate(per_class_accuracy):
+                    print(f"{i}\t{acc*100:.4f} ({correct_per_class[i]}/{total_per_class[i]})")
+                    logging.info(f"{i}\t{acc*100:.4f} ({correct_per_class[i]}/{total_per_class[i]})")
+                print("Total Accuracy: {accuracy}")
+                logging.info("Total Accuracy: {accuracy}")
+
+
+                if accuracy > best_accuracy:
+                    print(f"New best model found! New best accuracy = {accuracy}")
+                    logging.info(f"New best model found! New best accuracy = {accuracy}")
+                    best_accuracy = accuracy
+                    patience = 0
+                    best_model = model_save_name
+                else:
+                    patience += 1
+
+                fed_socket.recv()
+
+                if patience >= self.config["patience"]:
+                    self.terminate = True
+                    print("Patience has run out. Ending experiment.")
+                    logging.info("Patience has run out. Ending experiment.")
+                    fed_socket.send(b"1")
+                else: fed_socket.send(b"0")
+
+                fed_socket.close()
+                fed_context.term()
+
+                eval_time_end = time.perf_counter()
+
+                eval_time = eval_time_end - eval_time_start
+                total_eval_time += eval_time
+
+
             print("All rounds ended..")
 
-            print("Sending to fed server...")
-            fed_context = zmq.Context()
-            fed_url = f"{self.config["fed_server"]["server_ip"]}:{self.config["fed_server"]["server_start_port"] + client_total}"
-            fed_socket = fed_context.socket(zmq.REQ)
-            fed_socket.connect(fed_url)
-            print(f"Connected on {fed_url}")
+
+            ############################ legacy code
+            # print("Sending to fed server...")
+            # fed_context = zmq.Context()
+            # fed_url = f"{self.config["fed_server"]["server_ip"]}:{self.config["fed_server"]["server_start_port"] + client_total}"
+            # fed_socket = fed_context.socket(zmq.REQ)
+            # fed_socket.connect(fed_url)
+            # print(f"Connected on {fed_url}")
 
 
-            bytes_weights = convert.ordered_dict_to_bytes(server_global_weights)
-            fed_socket.send(bytes_weights)
-            fed_socket.recv()
-            print("Weights sent")
+            # bytes_weights = convert.ordered_dict_to_bytes(server_global_weights)
+            # fed_socket.send(bytes_weights)
+            # fed_socket.recv()
+            # print("Weights sent")
 
-            print(server_global_exposure)
+            #print(server_global_exposure)
 
-            bytes_exposure = convert.ordered_dict_to_bytes(server_global_exposure)
-            fed_socket.send(bytes_exposure)
-            fed_socket.recv()
-            print("exposure sent")
+            # bytes_exposure = convert.ordered_dict_to_bytes(server_global_exposure)
+            # fed_socket.send(bytes_exposure)
+            # fed_socket.recv()
+            # print("exposure sent")
 
-            fed_socket.close()
-            fed_context.term()
-            print("socket closed")
+            # fed_socket.close()
+            # fed_context.term()
+            # print("socket closed")
 
             training_end_time = time.time()
             training_time = training_end_time - training_start_time
             print(f"SERVER_TOTAL_TRAINING_TIME = {training_time:.3f}")
             logging.info(f"SERVER_TOTAL_TRAINING_TIME = {training_time:.3f}")
+
+            print(f"best model was: {best_model} with an accuracy of {best_accuracy}.")
+
 
             context.term()
 

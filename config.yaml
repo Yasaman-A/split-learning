@@ -6,9 +6,13 @@ log_steps: 50
 #cpu OR gpu
 device: gpu
 client_total: 3
-epoch: 3
-round: 35
+epoch: 2
+round: 15
 batch_size: 32
+
+patience: 1
+test_cut_layer: 9
+
 # n for no_split, s: for getting split i from data server, Any number for the number of i.i.d splits.
 split_type: s
 split_server: 

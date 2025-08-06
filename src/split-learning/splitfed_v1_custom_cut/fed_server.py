@@ -17,6 +17,29 @@ from sys import getsizeof
 from .custom_model_avg import custom_model_avg, combine_fed_avg_models
 import logging
 import os
+import urllib.request
+import pickle
+from torchvision import transforms, models
+import torchvision.transforms as transforms
+import torch.nn as nn
+from tqdm.auto import tqdm
+
+
+class TransformedDataset(torch.utils.data.Dataset):
+    def __init__(self, data, transform=None):
+        self.data = data
+        self.transform = transform
+    
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, idx):
+        image, label = self.data[idx]
+        if self.transform:
+            image = self.transform(image)
+        return image, label
+
+
 
 class Runner:
     def __init__(self, config_path) -> None:
@@ -28,6 +51,73 @@ class Runner:
         client_total = self.config["client_total"]
         fed_port = self.config["fed_server"]["server_start_port"]
         rnd = self.config["round"]
+
+
+        ##################################################################
+        #Code to enable ad-hoc testing 
+        if(self.config["device"] == 'cpu'):
+            device = 'cpu'
+        else:
+            device = torch.device(
+                'cuda') if torch.cuda.is_available() else torch.device('cpu')
+
+
+        output_file = self.config["data_server"]["output_file"]
+        test_file = output_file.replace(".pkl", "_test.pkl")
+        test_file_tmp = f"tmp_fed_{test_file}"
+        cut_layer = self.config["test_cut_layer"]
+
+        urllib.request.urlretrieve(
+            f"{self.config["data_server"]["server_address"]}/{test_file}",
+            test_file_tmp
+            )
+
+        with open(test_file_tmp, 'rb') as handle:
+            testset = pickle.load(handle)
+
+        transformer = transforms.Compose([
+                transforms.RandomCrop(32, padding=4),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+                transforms.Normalize((0.4914, 0.4822, 0.4465),
+                                        (0.2023, 0.1994, 0.2010))
+            ])
+        
+        testset = TransformedDataset(testset, transform=transformer)
+        
+        testloader = torch.utils.data.DataLoader(testset,
+                                    batch_size=self.config["batch_size"],
+                                    shuffle=False,
+                                    num_workers=0,
+                                    persistent_workers=False
+        )
+
+        class ResNet18Client(nn.Module):
+
+            def __init__(self, config):
+                super(ResNet18Client, self).__init__()
+                self.logits = config["logits"]
+                self.cut_layer = cut_layer
+
+                self.model = models.resnet18(weights=None)
+
+                num_ftrs = self.model.fc.in_features
+                self.model.fc = nn.Sequential(nn.Flatten(),
+                                                  nn.Linear(num_ftrs, self.logits))
+                
+                self.layers = list(self.model.children())
+
+            def forward(self, x):
+                for i, l in enumerate(self.layers):
+                    if i > self.cut_layer:
+                        break
+                    x = l(x)
+                return x
+
+        config = {"cut_layer": int(cut_layer), "logits": 10}
+        model = ResNet18Client(config).to(device)
+
+        ##################################################################
 
         if (self.config["logging"]):
             log_path = os.path.join(
@@ -136,7 +226,9 @@ class Runner:
             datasetsize_client = []
             client_cut_layer_list = []
 
-            client_exposure = []
+            #client_exposure = []
+
+            terminate = False
 
             total_threads = int(client_total)
             port_no = int(fed_port)
@@ -146,6 +238,11 @@ class Runner:
             context = zmq.Context()
 
             for r in range(num_rounds):
+                if terminate:
+                    context.term()
+                    print("Terminate recieved.")
+                    logging.info("Terminate recieved.")
+                    break
                 print("New round started..")
                 logging.info("New round started..")
                 thrs = []
@@ -203,33 +300,77 @@ class Runner:
                     time.sleep(1) #gpu is too fast for ZMQ; race condition occurs and fed server terminates.
 
                 print("All threads ended..")
+
+                #get accuracy of aggregated models
+                serv_context = zmq.Context()
+                serv_url = f"tcp://*:{fed_port+client_total}"
+                serv_socket = serv_context.socket(zmq.REQ)
+                serv_socket.bind(serv_url)
+                print(f"listening on {serv_url}")
+
+                #send dataset length
+                test_iters = len(testloader)
+                send_test_iters = str(test_iters).encode()
+                serv_socket.send(send_test_iters)
+                serv_socket.recv()
+                
+                bar = tqdm(testloader, desc=f"testset: ", unit='', ascii=True,
+                           bar_format='{desc} {n_fmt}/{total_fmt} {percentage:3.0f}%|{bar}| {postfix}')
+
+                model.eval()
+
+                with torch.no_grad():
+                    for data in bar:
+                        inputs, labels = data[0].to(device), data[1].to(device)
+
+                        #send labels
+                        bytes_labels = convert.array_to_bytes(labels.cpu())
+                        serv_socket.send(bytes_labels)
+                        serv_socket.recv()
+
+                        #send activations
+                        activations = model(inputs)
+                        server_inputs = activations.detach().clone()
+                        bytes_server_inputs = convert.array_to_bytes(server_inputs.cpu())
+
+                        serv_socket.send(bytes_server_inputs)
+                        serv_socket.recv()
+
+                serv_socket.send(b"term?")
+                terminate = bool(int(serv_socket.recv().decode()))
+
+                serv_socket.close()
+                serv_context.term()
+
+            print("socket closed")
+
+
+
             print("All rounds ended..")
             logging.info("All rounds ended..")
 
-            serv_context = zmq.Context()
-            serv_url = f"tcp://*:{fed_port+client_total}"
-            serv_socket = serv_context.socket(zmq.REP)
-            serv_socket.bind(serv_url)
-            print(f"listening on {serv_url}")
 
-            bytes_weights = serv_socket.recv()
-            serv_socket.send("a".encode())
-            serv_weights = convert.bytes_to_dict(bytes_weights)
-            print("got weights")
 
-            bytes_exposure = serv_socket.recv()
-            serv_socket.send("a".encode())
-            serv_exposure = convert.bytes_to_dict(bytes_exposure)
-            print("got exposure")
 
-            serv_socket.close()
-            serv_context.term()
-            print("socket closed")
 
-            final_model_weights = combine_fed_avg_models(client_global_weights, client_exposure, serv_weights, serv_exposure)
-            model_save_name = f"./final_aggregate_model.pt"
-            model_save_name = os.path.join(self.config.get("model_dir", "./"), "final_aggregate_model.pt")
-            torch.save(final_model_weights, model_save_name)
+
+
+            #exposure / final aggregation legacy code.
+
+            # bytes_weights = serv_socket.recv()
+            # serv_socket.send("a".encode())
+            # serv_weights = convert.bytes_to_dict(bytes_weights)
+            # print("got weights")
+
+            # bytes_exposure = serv_socket.recv()
+            # serv_socket.send("a".encode())
+            # serv_exposure = convert.bytes_to_dict(bytes_exposure)
+            # print("got exposure")
+
+            # final_model_weights = combine_fed_avg_models(client_global_weights, client_exposure, serv_weights, serv_exposure)
+            # model_save_name = f"./final_aggregate_model.pt"
+            # model_save_name = os.path.join(self.config.get("model_dir", "./"), "final_aggregate_model.pt")
+            # torch.save(final_model_weights, model_save_name)
 
 
             context.term()
