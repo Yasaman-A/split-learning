@@ -412,8 +412,8 @@ class Runner:
                 for i, acc in enumerate(per_class_accuracy):
                     print(f"{i}\t{acc*100:.4f} ({correct_per_class[i]}/{total_per_class[i]})")
                     logging.info(f"{i}\t{acc*100:.4f} ({correct_per_class[i]}/{total_per_class[i]})")
-                print("Total Accuracy: {accuracy}")
-                logging.info("Total Accuracy: {accuracy}")
+                print(f"Total Accuracy: {accuracy}")
+                logging.info(f"Total Accuracy: {accuracy}")
 
 
                 if accuracy > best_accuracy:
