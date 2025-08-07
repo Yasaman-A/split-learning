@@ -314,10 +314,15 @@ class Runner:
                 serv_socket.send(send_test_iters)
                 serv_socket.recv()
                 
+
+                config = {"cut_layer": int(self.config['test_cut_layer']), "logits": 10}
+                test_model = ResNet18Client(config).to(device)
+                test_model.load_state_dict(client_global_weights)
+
                 bar = tqdm(testloader, desc=f"testset: ", unit='', ascii=True,
                            bar_format='{desc} {n_fmt}/{total_fmt} {percentage:3.0f}%|{bar}| {postfix}')
 
-                model.eval()
+                test_model.eval()
 
                 with torch.no_grad():
                     for data in bar:
@@ -329,7 +334,7 @@ class Runner:
                         serv_socket.recv()
 
                         #send activations
-                        activations = model(inputs)
+                        activations = test_model(inputs)
                         server_inputs = activations.detach().clone()
                         bytes_server_inputs = convert.array_to_bytes(server_inputs.cpu())
 
@@ -338,6 +343,8 @@ class Runner:
 
                 serv_socket.send(b"term?")
                 terminate = bool(int(serv_socket.recv().decode()))
+
+                test_model.train()
 
                 serv_socket.close()
                 serv_context.term()

@@ -363,6 +363,7 @@ class Runner:
                 
                 config = {"cut_layer": self.config['test_cut_layer'], "logits": 10}
                 fed_model = ResNet18Server(config).to(device)
+                fed_model.load_state_dict(server_global_weights)
 
                 correct = 0
                 total = 0
@@ -370,7 +371,7 @@ class Runner:
                 total_per_class   = torch.zeros(config['logits'], dtype=torch.long)
 
                 eval_time_start = time.perf_counter()
-
+                fed_model.eval()
                 with torch.no_grad():
                     for j in range(fed_iters):
                         #receive labels
@@ -406,6 +407,8 @@ class Runner:
 
                 accuracy = (correct / total) * 100 if total > 0 else 0
                 per_class_accuracy = correct_per_class.float() / total_per_class.clamp(min=1)
+                
+                fed_model.train()
 
                 print("Class\tAccuracy")
                 logging.info("Class\tAccuracy")

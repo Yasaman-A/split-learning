@@ -265,9 +265,9 @@ class Runner:
 
 
         initial_loading_end_time = time.perf_counter()
-        metrics['initial loading'] = initial_loading_end_time - initial_loading_start_time
-        print(f"CLIENT_INITIAL_LOADING_TIME = {metrics['initial loading']}")
-        logging.info(f"CLIENT_INITIAL_LOADING_TIME = {metrics['initial loading']}")
+        metrics['initial loading time'] = initial_loading_end_time - initial_loading_start_time
+        print(f"CLIENT_INITIAL_LOADING_TIME = {metrics['initial loading time']}")
+        logging.info(f"CLIENT_INITIAL_LOADING_TIME = {metrics['initial loading time']}")
 
         running_time_start = time.perf_counter()
 
@@ -278,7 +278,7 @@ class Runner:
         '''
 
         for r in range(num_rounds):
-            metrics['round']['running_time']    = 0
+            metrics['round']['running time']    = 0
             metrics['round']['training time']   = 0
             metrics['round']['server work time']= 0
             metrics['round']['testing time']    = 0
@@ -682,7 +682,7 @@ class Runner:
 
 
         running_time_end = time.perf_counter()
-        metrics['running_time'] = running_time_end - running_time_start
+        metrics['running time'] = running_time_end - running_time_start
 
         total_sent_to_servers = metrics['sent to split'] + metrics['recv from split']
         total_rcvd_from_servers = metrics['sent to fed'] + metrics['recv from fed']
