@@ -21,10 +21,11 @@ esac
 time=$(date +%F_%H_%M_%S)
 TERMINAL=$(tty)
 
+
 #global array to keep track of logging processes.
 loggers=()
 
-
+PYTHON=~/venv/bin/python3
 
 #terminate_loggers
 #kills all logging functions of that round. Pevents logging beyond scope of runs.
@@ -101,7 +102,6 @@ function update_hyperparameters() {
 function run_client() {
     
     cd /$HOME/split-learning
-    source venv/bin/activate
     
     #launch based on client name
     if [[ "$device" == "split-server" ]]; then
@@ -110,9 +110,9 @@ function run_client() {
         collect_data "$1" "$2"
         
         if [[ "$3" != *','* ]]; then
-            python3 -m src.split-learning --mode splitfed_v1 --server
+            $PYTHON -m src.split-learning --mode splitfed_v1 --server
         else
-            python3 -m src.split-learning --mode splitfed_v1_custom_cut --server --extra $3
+            $PYTHON -m src.split-learning --mode splitfed_v1_custom_cut --server --extra $3
         fi
 
         kill $server_pid
@@ -120,7 +120,7 @@ function run_client() {
     elif [[ "$device" == "fed-server" ]]; then
         echo "starting the data server"
         
-        python3 -m http.server 8000&
+        $PYTHON -m http.server 8000&
         server_pid=$!
         trap "kill $server_pid" EXIT
         
@@ -128,9 +128,9 @@ function run_client() {
         collect_data "$1" "$2"
     
         if [[ "$3" != *','* ]]; then
-            python3 -m src.split-learning --mode splitfed_v1 --fed
+            $PYTHON -m src.split-learning --mode splitfed_v1 --fed
         else
-            python3 -m src.split-learning --mode splitfed_v1_custom_cut --fed
+            $PYTHON -m src.split-learning --mode splitfed_v1_custom_cut --fed
         fi
 
     #check for client num
@@ -140,12 +140,12 @@ function run_client() {
         collect_data "$1" "$2" 
         
         if [[ "$3" != *','* ]]; then
-            python3 -m src.split-learning --mode splitfed_v1 --client $client_num
+            $PYTHON -m src.split-learning --mode splitfed_v1 --client $client_num
         else
             IFS=',' read -r -a split_points <<< "$3"
             split_point=${split_points[$client_num - 1]}
             echo "Split point set to $split_point"
-            python3 -m src.split-learning --mode splitfed_v1_custom_cut --client $client_num --extra $split_point
+            $PYTHON -m src.split-learning --mode splitfed_v1_custom_cut --client $client_num --extra $split_point
         fi
     else
         echo "Invalid device configuration. Did you specify the right name on launch?"

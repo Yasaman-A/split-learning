@@ -36,14 +36,14 @@ class Main:
         parser.add_argument('--extra', type=str,            help='Run client with id.')
 
         # Arguments for creating the data pickle files. If this exists, it will have priority over the above
-        parser.add_argument('--generate',    action='store_true',                         help='For non-iid.')
-        parser.add_argument('--iid',         type=bool, dest='iid', action='store_true',  help='For generating iid data')
-        parser.add_argument('--non-iid',     type=bool, dest='iid', action='store_false', help='For generating non-iid data')
-        parser.add_argument('--dataset_name',type=str,                                    help='For selecting which dataset to use')
-        parser.add_argument('--output_name', type=str,                                    help='data output file name')
-        parser.add_argument('--classes_pc',  type=int, default=2,                         help='For non-iid.')
-        parser.add_argument('--num_clients', type=int, default=6,                         help='Number of clients to split data for')
-        parser.add_argument('--seed',        type=int, default=None,                      help='Seed for consistent data generation')
+        parser.add_argument('--generate',    action='store_true',              help='For non-iid.')
+        parser.add_argument('--iid',         dest='iid', action='store_true',  help='For generating iid data')
+        parser.add_argument('--non-iid',     dest='iid', action='store_false', help='For generating non-iid data')
+        parser.add_argument('--dataset_name',type=str,                         help='For selecting which dataset to use')
+        parser.add_argument('--output_name', type=str,                         help='data output file name')
+        parser.add_argument('--classes_pc',  type=int, default=2,              help='For non-iid.')
+        parser.add_argument('--num_clients', type=int, default=6,              help='Number of clients to split data for')
+        parser.add_argument('--seed',        type=int, default=None,           help='Seed for consistent data generation')
 
         args = parser.parse_args()
         if args.generate:
