@@ -1,13 +1,28 @@
 #! /usr/bin/bash
 
-device=$(hostname)
+
+#parse launch for client or server
+case "$1" in
+    --server)
+        device="split-server"
+        ;;
+    --fed)
+        device="fed-server"
+        ;;
+    --client)
+        device="$2"
+        ;;
+    *)
+        echo "Usage: $0 --server | --fed | --client <n>"
+        exit 1
+        ;;
+esac
+
 time=$(date +%F_%H_%M_%S)
 TERMINAL=$(tty)
 
 #global array to keep track of logging processes.
 loggers=()
-
-
 
 
 
@@ -54,7 +69,7 @@ function change_setup_config() {
     yq -yi ".fed_server.server_ip = \"tcp://$5\"" "$1"
     yq -yi ".fed_server.server_start_port = $6" "$1"
 
-    yq -yi ".data_server.server_address = \"http://$3:8000\"" "$1" #keep data server on split-server
+    yq -yi ".data_server.server_address = \"http://$3:8000\"" "$1" #keep data server on fed-server
     yq -yi ".data_server.output_file = $7" "$1"
 
 }
@@ -90,11 +105,7 @@ function run_client() {
     
     #launch based on client name
     if [[ "$device" == "split-server" ]]; then
-        echo "Starting the Split Server and Data Server"
-        server_ip=$(ip address show dev ens4 | awk '/inet / {split($2, a, "/"); print a[1]}')
-        python3 -m http.server -b $server_ip 8000 -d data&
-        server_pid=$!
-        trap "kill $server_pid" EXIT
+        echo "Starting the Split Server"
         
         collect_data "$1" "$2"
         
@@ -107,6 +118,12 @@ function run_client() {
         kill $server_pid
 
     elif [[ "$device" == "fed-server" ]]; then
+        echo "starting the data server"
+        
+        python3 -m http.server 8000&
+        server_pid=$!
+        trap "kill $server_pid" EXIT
+        
         echo "Starting the fed server."
         collect_data "$1" "$2"
     
@@ -116,12 +133,9 @@ function run_client() {
             python3 -m src.split-learning --mode splitfed_v1_custom_cut --fed
         fi
 
-    
-    elif [[ "$device" =~ ^client-[0-9]+ ]]; then
-        sleep 3 #give the split-server enough time to start up
-        client_num="${device##*-}"
-        client_num="${client_num#"0"}"
-        client_num="${client_num:-0}"
+    #check for client num
+    elif [[ "$device" =~ ^[0-9]+$ ]]; then
+        client_num=$device
         echo "Starting client-$client_num";
         collect_data "$1" "$2" 
         
@@ -134,7 +148,7 @@ function run_client() {
             python3 -m src.split-learning --mode splitfed_v1_custom_cut --client $client_num --extra $split_point
         fi
     else
-        echo "Invalid device configuration. Did you set up the instance correctly?"
+        echo "Invalid device configuration. Did you specify the right name on launch?"
         echo "Device name: $device"
     fi
     

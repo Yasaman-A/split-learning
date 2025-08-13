@@ -411,11 +411,11 @@ class Runner:
                     total_one_step_time = step_end_time - step_start_time
                     server_work_time = server_work_time_end - server_work_time_start
 
-                    metrics['epoch']['server work time'] += server_work_time_end - server_work_time_start
+                    metrics['epoch']['server work time'] += server_work_time
 
                     bar.set_postfix({
                         "step_time": f"{total_one_step_time:.3f}",
-                        "server_time": f"{metrics['epoch']['server work time']:.3f}"
+                        "server_time": f"{server_work_time:.3f}"
                     })
                     logging.info(
                         f"CLIENT_TOTAL_ONE_STEP_TIME = {total_one_step_time:.3f}    , "

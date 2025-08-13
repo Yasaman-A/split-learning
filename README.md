@@ -78,8 +78,8 @@ This code can accept the following parameters:
 
 Example calls are as follows:
 
-`python -m src.split-learning --generate --iid True --dataset_name cifar10 --output_name output --num_clients 6 --seed 42`  
-`python -m src.split-learning --generate --iid False --dataset_name cifar10 --output_name output_non_iid --num_clients 6 --classes_pc 2 --seed 42`
+`python -m src.split-learning --generate --iid --dataset_name cifar10 --output_name output --num_clients 6 --seed 42`  
+`python -m src.split-learning --generate --non-iid --dataset_name cifar10 --output_name output_non_iid --num_clients 6 --classes_pc 2 --seed 42`
 
 To use the split data, a simple python file server should be spun up in the directory containing the pickle files.  
 `python -m http.server port_number`, e.g. `python -m http.server 8000`
