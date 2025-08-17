@@ -245,27 +245,27 @@ function manual_input() {
         cut_layer="X,X,X"
     fi
     
-    echo "16" | dialog --no-clear --gauge "Getting Config Values" 15 50 25
+    echo "16" | dialog --no-clear --gauge "Getting Config Values" 15 50 16
     epoch=$(yq '.epoch' "$1")
     
-    echo "33" | dialog --no-clear --gauge "Getting Config Values" 15 50 25
+    echo "33" | dialog --no-clear --gauge "Getting Config Values" 15 50 33
     round=$(yq '.round' "$1")
 
-    echo "50" | dialog --no-clear --gauge "Getting Config Values" 15 50 25
+    echo "50" | dialog --no-clear --gauge "Getting Config Values" 15 50 50
     split_type=$(yq '.split_type' "$1" | sed 's/^"\|"$//g')
 
-    echo "66" | dialog --no-clear --gauge "Getting Config Values" 15 50 25
+    echo "66" | dialog --no-clear --gauge "Getting Config Values" 15 50 66
     patience=$(yq '.patience' $1)
 
-    echo "83" | dialog --no-clear --gauge "Getting Config Values" 15 50 25
-    test_cut_Layer=$(yq 'test_cut_layer' $1)
+    echo "83" | dialog --no-clear --gauge "Getting Config Values" 15 50 83
+    test_cut_Layer=$(yq '.test_cut_layer' $1)
 
     OPTIONS=("Cut Layer:" 1 1 "$cut_layer" 1 20 30 0
              "Epochs:" 2 1 "$epoch" 2 20 30 0
              "Rounds:" 3 1 "$round" 3 20 30 0
              "Split Type:" 4 1 "$split_type" 4 20 30 0
              "Patience:" 5 1 "$patience" 5 20 30 0
-             "Test Cut layer:" 6 1 $test_cut_layer 6 20 30 0)
+             "Test Cut layer:" 6 1 "$test_cut_layer" 6 20 30 0)
 
     CHOICE=$(dialog --clear \
             --backtitle "$BACKTITLE - Manual" \
@@ -366,24 +366,24 @@ function modify_config() {
     echo "0" | dialog --no-clear --gauge "Getting Config Values" 15 50 0
     num_clients=$(yq '.client_total' "$1")
     
-    echo "14" | dialog --no-clear --gauge "Getting Config Values" 15 50 17
+    echo "14" | dialog --no-clear --gauge "Getting Config Values" 15 50 14
     split_ip=$(yq '.split_server.server_ip' "$1" | sed 's/^"tcp:\/\///;s/"$//')
     
-    echo "29" | dialog --no-clear --gauge "Getting Config Values" 15 50 33
+    echo "29" | dialog --no-clear --gauge "Getting Config Values" 15 50 29
     split_port=$(yq '.split_server.server_start_port' "$1")
 
-    echo "43" | dialog --no-clear --gauge "Getting Config Values" 15 50 50
+    echo "43" | dialog --no-clear --gauge "Getting Config Values" 15 50 43
     fed_ip=$(yq '.fed_server.server_ip' "$1" | sed 's/^"tcp:\/\///;s/"$//')
 
-    echo "57" | dialog --no-clear --gauge "Getting Config Values" 15 50 66
+    echo "57" | dialog --no-clear --gauge "Getting Config Values" 15 50 57
     fed_port=$(yq '.fed_server.server_start_port' "$1")
 
-    echo "71" | dialog --no-clear --gauge "Getting Config Values" 15 50 66
+    echo "71" | dialog --no-clear --gauge "Getting Config Values" 15 50 71
     data_address=$(yq '.data_server.server_address' "$1" | sed 's/^"//;s/"$//')
     data_ip=$(echo "$data_address" | sed 's|http://\([^:]*\):.*|\1|')
     data_port=$(echo "$data_address" | sed 's|.*:\([0-9]*\)|\1|')
 
-    echo "86" | dialog --no-clear --gauge "Getting Config Values" 15 50 83
+    echo "86" | dialog --no-clear --gauge "Getting Config Values" 15 50 86
     output=$(yq '.data_server.output_file' "$1")
 
     
