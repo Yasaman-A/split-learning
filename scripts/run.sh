@@ -258,7 +258,7 @@ function manual_input() {
     patience=$(yq '.patience' $1)
 
     echo "83" | dialog --no-clear --gauge "Getting Config Values" 15 50 83
-    test_cut_Layer=$(yq '.test_cut_layer' $1)
+    test_cut_layer=$(yq '.test_cut_layer' $1)
 
     OPTIONS=("Cut Layer:" 1 1 "$cut_layer" 1 20 30 0
              "Epochs:" 2 1 "$epoch" 2 20 30 0
