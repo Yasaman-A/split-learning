@@ -60,7 +60,9 @@ function collect_data() {
 # 4 = split port
 # 5 = fed ip
 # 6 = fed port
-# 7 = output_file -> data file used by data server
+# 7 = data ip
+# 8 = data port
+# 9 = output_file -> data file used by data server
 function change_setup_config() {
     clear
     yq -yi ".client_total = $2" "$1"
@@ -70,8 +72,8 @@ function change_setup_config() {
     yq -yi ".fed_server.server_ip = \"tcp://$5\"" "$1"
     yq -yi ".fed_server.server_start_port = $6" "$1"
 
-    yq -yi ".data_server.server_address = \"http://$3:8000\"" "$1" #keep data server on fed-server
-    yq -yi ".data_server.output_file = $7" "$1"
+    yq -yi ".data_server.server_address = \"http://$7:$8\"" "$1" 
+    yq -yi ".data_server.output_file = $9" "$1"
 
 }
 
@@ -81,16 +83,20 @@ function change_setup_config() {
 # 3 = epoch
 # 4 = round
 # 5 = split_type
-# 6 = custom_cut_mode
+# 6 = patience
+# 7 = test_cut_layer
+# 8 = custom_cut_mode
 
 function update_hyperparameters() {
 
-    if [[ $6 == "false" ]]; then
+    if [[ $8 == "false" ]]; then
         yq -yi ".cut_layer = $2" "$1"
     fi    
     yq -yi ".epoch = $3" "$1"
     yq -yi ".round = $4" "$1"
     yq -yi ".split_type = \"$5\"" "$1"
+    yq -yi ".patience = $6" "$1"
+    yq -yi ".test_cut_Layer = $7" "$1"
 
 }
 
@@ -180,7 +186,6 @@ function run_auto() {
     output_dir="/$HOME/auto_experiments/$time/"
 
 
-    #TODO: Add progress bar of some sort?
     while IFS= read -r line
     do
         run_params=($line)
@@ -252,7 +257,9 @@ function manual_input() {
     OPTIONS=("Cut Layer:" 1 1 "$cut_layer" 1 20 30 0
              "Epochs:" 2 1 "$epoch" 2 20 30 0
              "Rounds:" 3 1 "$round" 3 20 30 0
-             "Split Type:" 4 1 "$split_type" 4 20 30 0)
+             "Split Type:" 4 1 "$split_type" 4 20 30 0
+             "Patience:" 5 1 "$patience" 5 20 30 0
+             "Test Cut layer:" 6 1 $test_cut_layer 6 20 30 0)
 
     CHOICE=$(dialog --clear \
             --backtitle "$BACKTITLE - Manual" \
@@ -267,8 +274,10 @@ function manual_input() {
         epoch=$(echo "$CHOICE" | sed -n '2p')
         round=$(echo "$CHOICE" | sed -n '3p')
         split_type=$(echo "$CHOICE" | sed -n '4p')
+        patience=$(echo "$CHOICE" | sed -n '5p')
+        test_cut_layer=$(echo "$CHOICE" | sed -n '6p')
 
-        update_hyperparameters "$1" "$cut_layer" "$epoch" "$round" "$split_type" $2
+        update_hyperparameters "$1" "$cut_layer" "$epoch" "$round" "$split_type" "$patience" "$test_cut_layer" $2
         dialog --infobox "Successfully updated hyperparameters" 10 30
         sleep 2
 
@@ -365,13 +374,16 @@ function modify_config() {
 
     echo "83" | dialog --no-clear --gauge "Getting Config Values" 15 50 83
     output=$(yq '.data_server.output_file' "$1")
+
     
     OPTIONS=("Number of clients" 1 1 "$num_clients" 1 20 30 0
              "Split Server IP" 2 1 "$split_ip" 2 20 30 0
              "Split Server Port" 3 1 "$split_port" 3 20 30 0
              "Fed Server IP" 4 1 "$fed_ip" 4 20 30 0
              "Fed Server Port" 5 1 "$fed_port" 5 20 30 0
-             "Output File" 6 1 "$output" 6 20 30 0)
+             "Data Server IP" 6 1 "$data_ip" 6 20 30 0
+             "Data Server Port" 7 1 "$data_port" 7 20 30 0
+             "Output File" 8 1 "$output" 8 20 30 0)
     
     CHOICE=$(dialog --clear \
                     --backtitle "$BACKTITLE - Configuration" \
@@ -387,9 +399,11 @@ function modify_config() {
         split_port=$(echo "$CHOICE" | sed -n '3p')
         fed_ip=$(echo "$CHOICE" | sed -n '4p')
         fed_port=$(echo "$CHOICE" | sed -n '5p')
-        output=$(echo "$CHOICE" | sed -n '6p')
+        data_ip=$(echo "$CHOICE" | sed -n '6p')
+        data_port=$(echo "$CHOICE" | sed -n '7p')
+        output=$(echo "$CHOICE" | sed -n '8p')
         
-        change_setup_config "$1" "$num_clients" "$split_ip" "$split_port" "$fed_ip" "$fed_port" "$output"
+        change_setup_config "$1" "$num_clients" "$split_ip" "$split_port" "$fed_ip" "$fed_port" "$data_ip" "$data_port" "$output"
 
         dialog --infobox "Config successfully updated." 10 30
         sleep 2
