@@ -96,7 +96,7 @@ function update_hyperparameters() {
     yq -yi ".round = $4" "$1"
     yq -yi ".split_type = \"$5\"" "$1"
     yq -yi ".patience = $6" "$1"
-    yq -yi ".test_cut_Layer = $7" "$1"
+    yq -yi ".test_cut_layer = $7" "$1"
 
 }
 
