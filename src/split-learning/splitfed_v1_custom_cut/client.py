@@ -464,11 +464,11 @@ class Runner:
                 # client_model.train()                
                 
                 # epoch_test_end = time.perf_counter()
-                # epoch_running_end = time.perf_counter()
+                epoch_running_end = time.perf_counter()
             
                 metrics['epoch']['running time']  = epoch_running_end - epoch_running_start
                 metrics['epoch']['training time'] = epoch_train_end - epoch_train_start
-                metrics['epoch']['testing time']  = epoch_test_end - epoch_test_start
+                #metrics['epoch']['testing time']  = epoch_test_end - epoch_test_start
 
                 metrics['round']['training time']    += metrics['epoch']['training time']
                 metrics['round']['server work time'] += metrics['epoch']['server work time']
