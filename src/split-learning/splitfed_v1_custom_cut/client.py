@@ -428,43 +428,43 @@ class Runner:
                 epoch_train_end = time.perf_counter() 
 
                 #======= TEST SET ========
-                epoch_test_start = time.perf_counter()
+                # epoch_test_start = time.perf_counter()
 
-                bar = tqdm(testloader, desc=f"testset: ", unit='', ascii=True,
-                           bar_format='{desc} {n_fmt}/{total_fmt} {percentage:3.0f}%|{bar}| {postfix}')
-                client_model.eval()
+                # bar = tqdm(testloader, desc=f"testset: ", unit='', ascii=True,
+                #            bar_format='{desc} {n_fmt}/{total_fmt} {percentage:3.0f}%|{bar}| {postfix}')
+                # client_model.eval()
 
-                with torch.no_grad():
-                    for data in bar:
-                        inputs, labels = data[0].to(device), data[1].to(device)
+                # with torch.no_grad():
+                #     for data in bar:
+                #         inputs, labels = data[0].to(device), data[1].to(device)
                         
-                        #send labels to server
-                        bytes_labels = convert.array_to_bytes(labels.cpu())
-                        socket.send(bytes_labels)
+                #         #send labels to server
+                #         bytes_labels = convert.array_to_bytes(labels.cpu())
+                #         socket.send(bytes_labels)
 
-                        ##dummy......
-                        names = socket.recv()
+                #         ##dummy......
+                #         names = socket.recv()
 
-                        #forward prop and sending activations to server
-                        activations = client_model(inputs)
-                        server_inputs = activations.detach().clone()
-                        bytes_server_inputs = convert.array_to_bytes(server_inputs.cpu())                    
+                #         #forward prop and sending activations to server
+                #         activations = client_model(inputs)
+                #         server_inputs = activations.detach().clone()
+                #         bytes_server_inputs = convert.array_to_bytes(server_inputs.cpu())                    
                         
-                        socket.send(bytes_server_inputs)
+                #         socket.send(bytes_server_inputs)
 
-                        socket.recv()
+                #         socket.recv()
                 
-                socket.send("acc".encode())
-                accuracy = float(socket.recv().decode())
+                # socket.send("acc".encode())
+                # accuracy = float(socket.recv().decode())
 
-                if accuracy > metrics['best acc']:
-                    metrics['best acc'] = accuracy
-                    metrics['best model'] = f"r{r}e{epoch}"
+                # if accuracy > metrics['best acc']:
+                #     metrics['best acc'] = accuracy
+                #     metrics['best model'] = f"r{r}e{epoch}"
 
-                client_model.train()                
+                # client_model.train()                
                 
-                epoch_test_end = time.perf_counter()
-                epoch_running_end = time.perf_counter()
+                # epoch_test_end = time.perf_counter()
+                # epoch_running_end = time.perf_counter()
             
                 metrics['epoch']['running time']  = epoch_running_end - epoch_running_start
                 metrics['epoch']['training time'] = epoch_train_end - epoch_train_start

@@ -6,6 +6,7 @@ import numpy as np
 from torch.utils.data import Subset
 from tqdm.auto import tqdm
 from collections import defaultdict, Counter
+from sklearn.model_selection import train_test_split
 
 '''
 Dataset Getters
@@ -52,8 +53,11 @@ def preprocess_subset(subset, index):
     '''
     data = []
     labels = []
+    if index == -1:   desc=f"Processing data for test set"
+    elif index == -2: desc=f"Processing data for val set"
+    else:             desc=f"Processing data for client: {index}"
 
-    for x, y in tqdm(subset, desc=f"Processing data for client: {index}"):
+    for x, y in tqdm(subset, desc=desc):
         data.append(x)
         labels.append(y)
 
@@ -89,7 +93,7 @@ Distributors
 ===============================
 '''
 
-def shuffle_and_split_iid_data(training_data, testing_data, num_clients, output_name):
+def shuffle_and_split_iid_data(training_data, testing_data, val_data, num_clients, output_name):
     '''
     Splits training_data evenly into num_clients IID subsets and saves them to a pickle file.
     Saves the unmodified testing_data separately.
@@ -129,6 +133,7 @@ def shuffle_and_split_iid_data(training_data, testing_data, num_clients, output_
         preprocessed.append(preprocess_subset(subset, index))
 
     testing_set = preprocess_subset(testing_data, -1)
+    val_set = preprocess_subset(val_data, -2)
 
     print(f"Saving split data as: \'{output_name}.pkl\'")
     with open(output_name + ".pkl", 'wb') as f:
@@ -136,6 +141,9 @@ def shuffle_and_split_iid_data(training_data, testing_data, num_clients, output_
     print(f"Saving test data as: \'{output_name}_test.pkl\'")
     with open(output_name + "_test" + ".pkl", 'wb') as f:
         pickle.dump(testing_set, f, protocol=pickle.HIGHEST_PROTOCOL)
+        print(f"Saving validation data as: \'{output_name}_val.pkl\'")
+    with open(output_name + "_val" + ".pkl", 'wb') as f:
+        pickle.dump(val_set, f, protocol=pickle.HIGHEST_PROTOCOL)
 
     return
 
@@ -143,7 +151,7 @@ def shuffle_and_split_iid_data(training_data, testing_data, num_clients, output_
 
 
 
-def split_non_iid_data(training_data, testing_data, num_clients, output_name, classes_per_client=2):
+def split_non_iid_data(training_data, testing_data, val_data, num_clients, output_name, classes_per_client=2):
     '''
     Splits the dataset into non-IID subsets by assigning each client a fixed number of classes.
 
@@ -181,6 +189,7 @@ def split_non_iid_data(training_data, testing_data, num_clients, output_name, cl
         preprocessed.append(preprocess_subset(subset, index))
 
     testing_set = preprocess_subset(testing_data, -1)
+    val_set = preprocess_subset(val_data, -2)
 
     print(f"Saving split data as: \'{output_name}.pkl\'")
     with open(output_name + ".pkl", 'wb') as f:
@@ -188,6 +197,9 @@ def split_non_iid_data(training_data, testing_data, num_clients, output_name, cl
     print(f"Saving test data as: \'{output_name}_test.pkl\'")
     with open(output_name + "_test" + ".pkl", 'wb') as f:
         pickle.dump(testing_set, f, protocol=pickle.HIGHEST_PROTOCOL)
+    print(f"Saving validation data as: \'{output_name}_val.pkl\'")
+    with open(output_name + "_val" + ".pkl", 'wb') as f:
+        pickle.dump(val_set, f, protocol=pickle.HIGHEST_PROTOCOL)
 
     return
 
@@ -213,24 +225,36 @@ def fetch_data(dataset_name):
     train, test = DATASET_GETTERS[dataset_name]()
     return train, test
 
+def split_train_validation(train_data, val_fraction=0.1, seed=None):
+    train, val = train_test_split(
+        train_data,
+        test_size = val_fraction,
+        shuffle=True,
+        random_state=seed
+    )
 
-def create_iid_dataset(dataset_name, num_clients=1, output_name="output", seed=None):
+    return train, val
+
+def create_iid_dataset(dataset_name, num_clients=1, output_name="output", val_fraction=0.1, seed=None):
     if seed is not None:
         set_seed(seed)
 
     train, test = fetch_data(dataset_name)
+    train, val = split_train_validation(train, val_fraction, seed)
 
-    shuffle_and_split_iid_data(train, test, num_clients, output_name)
+
+    shuffle_and_split_iid_data(train, test, val, num_clients, output_name)
     return 
 
 
-def create_non_iid_dataset(dataset_name, num_clients, output_name="output", classes_per_client=2, seed=None):
+def create_non_iid_dataset(dataset_name, num_clients, output_name="output", classes_per_client=2,  val_fraction=0.1, seed=None):
     if seed is not None:
         set_seed(seed)
 
     train, test = fetch_data(dataset_name)
+    train, val = split_train_validation(train, val_fraction, seed)
 
-    split_non_iid_data(train, test, num_clients, output_name, classes_per_client)
+    split_non_iid_data(train, test, val, num_clients, output_name, classes_per_client)
     return
 
 #create_iid_dataset("cifar10", num_clients=6, seed=42, output_name="six_clients")

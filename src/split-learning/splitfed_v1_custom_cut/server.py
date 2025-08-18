@@ -210,46 +210,46 @@ class Runner:
                 ################################################################################
                 # TEST SET
 
-                server_model.eval()
+                # server_model.eval()
 
-                correct = 0
-                total = 0
+                # correct = 0
+                # total = 0
 
-                with torch.no_grad():
-                    for j in range(test_iters):
-                        #receive labels
-                        recv_labels = socket.recv()
-                        numpy_labels = convert.bytes_to_array(recv_labels)
-                        labels = torch.from_numpy(numpy_labels)
-                        labels = labels.to(device)
+                # with torch.no_grad():
+                #     for j in range(test_iters):
+                #         #receive labels
+                #         recv_labels = socket.recv()
+                #         numpy_labels = convert.bytes_to_array(recv_labels)
+                #         labels = torch.from_numpy(numpy_labels)
+                #         labels = labels.to(device)
 
-                        ##dummy......
-                        socket.send(send_msg)
+                #         ##dummy......
+                #         socket.send(send_msg)
 
-                        #get client activations
-                        recv_serv_inputs = socket.recv()
-                        numpy_server_inputs = convert.bytes_to_array(recv_serv_inputs)
-                        server_inputs = torch.from_numpy(numpy_server_inputs)
-                        server_inputs = server_inputs.to(device)
+                #         #get client activations
+                #         recv_serv_inputs = socket.recv()
+                #         numpy_server_inputs = convert.bytes_to_array(recv_serv_inputs)
+                #         server_inputs = torch.from_numpy(numpy_server_inputs)
+                #         server_inputs = server_inputs.to(device)
 
-                        #dummy
-                        socket.send(send_msg)
+                #         #dummy
+                #         socket.send(send_msg)
 
-                        #forward pass
-                        server_inputs = Variable(server_inputs, requires_grad=True)
-                        outputs = server_model(server_inputs)
+                #         #forward pass
+                #         server_inputs = Variable(server_inputs, requires_grad=True)
+                #         outputs = server_model(server_inputs)
 
-                        _, predicted = torch.max(outputs.data, 1)
-                        correct += (predicted == labels).sum().item()
-                        total += labels.size(0)
+                #         _, predicted = torch.max(outputs.data, 1)
+                #         correct += (predicted == labels).sum().item()
+                #         total += labels.size(0)
                     
-                    accuracy = 100 * correct / total if total > 0 else 0
+                #     accuracy = 100 * correct / total if total > 0 else 0
 
-                    socket.recv()
-                    socket.send(str(accuracy).encode())
-                    print(f" ***TH - {thread_no}*** Accuracy on test set for round {r} epoch {epoch}: {accuracy}%")
-                    logging.info(f"***TH - {thread_no}*** Accuracy on test set for round {r} epoch {epoch}: {accuracy}%")
-                    server_model.train()
+                #     socket.recv()
+                #     socket.send(str(accuracy).encode())
+                #     print(f" ***TH - {thread_no}*** Accuracy on test set for round {r} epoch {epoch}: {accuracy}%")
+                #     logging.info(f"***TH - {thread_no}*** Accuracy on test set for round {r} epoch {epoch}: {accuracy}%")
+                #     server_model.train()
 
 
 
