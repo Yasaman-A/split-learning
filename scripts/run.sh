@@ -160,8 +160,6 @@ function run_client() {
     
     terminate_loggers
 
-    deactivate
-
     mv logs/*.log "$1$2/"
 }
 

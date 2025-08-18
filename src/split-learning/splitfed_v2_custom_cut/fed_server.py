@@ -20,23 +20,28 @@ from sys import getsizeof
 import yaml
 import logging
 import os
-
-class ResNet18Client(nn.Module):
-    """docstring for ResNet"""
-
-    def __init__(self, config):
-        super(ResNet18Client, self).__init__()
-        self.cut_layer = config['cut_layer']
-        self.logits = config['logits']
-
-        self.model = models.resnet18(weights=None)
-
-        num_ftrs = self.model.fc.in_features
-        self.model.fc = nn.Sequential(nn.Flatten(),
-                                        nn.Linear(num_ftrs, self.logits))
+import urllib.request
+import pickle
+from torchvision import transforms, models
+import torchvision.transforms as transforms
+import torch.nn as nn
+from tqdm.auto import tqdm
 
 
-        self.layers = list(self.model.children())
+class TransformedDataset(torch.utils.data.Dataset):
+    def __init__(self, data, transform=None):
+        self.data = data
+        self.transform = transform
+    
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, idx):
+        image, label = self.data[idx]
+        if self.transform:
+            image = self.transform(image)
+        return image, label
+
 
 
 class Runner:
@@ -49,6 +54,69 @@ class Runner:
         client_total = self.config['client_total']
         fed_port = self.config['fed_server']['server_start_port']
         rnd = self.config['round']
+
+        ##################################################################
+        #Code to enable ad-hoc testing 
+        if(self.config['device'] == 'cpu'):
+            device = 'cpu'
+        else:
+            device = torch.device(
+                'cuda') if torch.cuda.is_available() else torch.device('cpu')
+
+
+        output_file = self.config['data_server']['output_file']
+        test_file = output_file.replace(".pkl", "_test.pkl")
+        test_file_tmp = f"tmp_fed_{test_file}"
+        cut_layer = self.config['test_cut_layer']
+
+        urllib.request.urlretrieve(
+            f"{self.config['data_server']['server_address']}/{test_file}",
+            test_file_tmp
+            )
+
+        with open(test_file_tmp, 'rb') as handle:
+            testset = pickle.load(handle)
+
+        transformer = transforms.Compose([
+                transforms.RandomCrop(32, padding=4),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+                transforms.Normalize((0.4914, 0.4822, 0.4465),
+                                        (0.2023, 0.1994, 0.2010))
+            ])
+        
+        testset = TransformedDataset(testset, transform=transformer)
+        
+        testloader = torch.utils.data.DataLoader(testset,
+                                    batch_size=self.config['batch_size'],
+                                    shuffle=False,
+                                    num_workers=0,
+                                    persistent_workers=False
+        )
+
+        class ResNet18Client(nn.Module):
+
+            def __init__(self, config):
+                super(ResNet18Client, self).__init__()
+                self.logits = config['logits']
+                self.cut_layer = cut_layer
+
+                self.model = models.resnet18(weights=None)
+
+                num_ftrs = self.model.fc.in_features
+                self.model.fc = nn.Sequential(nn.Flatten(),
+                                                  nn.Linear(num_ftrs, self.logits))
+                
+                self.layers = list(self.model.children())
+
+            def forward(self, x):
+                for i, l in enumerate(self.layers):
+                    if i > self.cut_layer:
+                        break
+                    x = l(x)
+                return x
+
+        ##################################################################
 
         if (self.config['logging']):
             log_path = os.path.join(
@@ -177,8 +245,14 @@ class Runner:
 
             num_rounds = rnd
             context = zmq.Context()
+            terminate = False
 
             for r in range(num_rounds):
+                if terminate:
+                    context.term()
+                    print("Terminate recieved.")
+                    logging.info("Terminate recieved.")
+                    break
                 print("New round started..")
                 thrs = []
                 
@@ -230,6 +304,54 @@ class Runner:
                 print("All threads ended..")
 
                 if self.config['device'] != 'cpu': time.sleep(0.5)
+
+                #get accuracy of aggregated models
+                serv_context = zmq.Context()
+                serv_url = f"tcp://*:{fed_port+client_total}"
+                serv_socket = serv_context.socket(zmq.REQ)
+                serv_socket.bind(serv_url)
+                print(f"listening on {serv_url}")
+
+                #send dataset length
+                test_iters = len(testloader)
+                send_test_iters = str(test_iters).encode()
+                serv_socket.send(send_test_iters)
+                serv_socket.recv()
+                
+
+                config = {"cut_layer": int(self.config['test_cut_layer']), "logits": 10}
+                test_model = ResNet18Client(config).to(device)
+                test_model.load_state_dict(client_global_weights)
+
+                bar = tqdm(testloader, desc=f"testset: ", unit='', ascii=True,
+                           bar_format='{desc} {n_fmt}/{total_fmt} {percentage:3.0f}%|{bar}| {postfix}')
+
+                test_model.eval()
+
+                with torch.no_grad():
+                    for data in bar:
+                        inputs, labels = data[0].to(device), data[1].to(device)
+
+                        #send labels
+                        bytes_labels = convert.array_to_bytes(labels.cpu())
+                        serv_socket.send(bytes_labels)
+                        serv_socket.recv()
+
+                        #send activations
+                        activations = test_model(inputs)
+                        server_inputs = activations.detach().clone()
+                        bytes_server_inputs = convert.array_to_bytes(server_inputs.cpu())
+
+                        serv_socket.send(bytes_server_inputs)
+                        serv_socket.recv()
+
+                serv_socket.send(b"term?")
+                terminate = bool(int(serv_socket.recv().decode()))
+
+                test_model.train()
+
+                serv_socket.close()
+                serv_context.term()
 
 
             print("All rounds ended..")

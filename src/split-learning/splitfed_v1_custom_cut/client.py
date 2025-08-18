@@ -64,7 +64,6 @@ class Runner:
         output_file = self.config['data_server']['output_file']
         rnd = self.config['round']
 
-        terminate = False #patience sentinel
 
         metrics = {
             #global time metrics

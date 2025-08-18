@@ -45,6 +45,7 @@ class Runner:
         with open(config_path, "r") as yamlfile:
             self.config = yaml.load(yamlfile, Loader=yaml.FullLoader)
             print("Read successful")
+        self.term = False
 
     #called by app.py in ../
     def set_extra_options(self, extra):
@@ -59,6 +60,55 @@ class Runner:
         rnd = self.config['round']
         cut_layer = self.input_cut_layer
         batch_size = self.config['batch_size']
+
+
+        metrics = {
+            #global time metrics
+            "running time"        : 0, 
+            "initial loading time": 0,
+            "round init time"     : 0,
+            "total training time" : 0,
+            "server work time"    : 0,
+            "testing time"        : 0,
+            "fed wait time"       : 0,
+            
+            #global networking metrics
+            "sent to split"  : 0,
+            "recv from split": 0,
+            "sent to fed"    : 0,
+            "recv from fed"  : 0,
+
+
+            #Per round and epoch time/networking metrics
+
+            "round": {
+                "running time"    : 0,
+                "training time"   : 0,
+                "server work time": 0,
+                "testing time"    : 0,
+                "fed wait time"   : 0,
+                "init time"       : 0,
+
+                "sent to split"  : 0,
+                "recv from split": 0,
+                "sent to fed"    : 0,
+                "recv from fed"  : 0,
+            },
+            "epoch": {
+                "running time"     : 0,
+                "training time"    : 0,
+                "server work time" : 0,
+                "testing time"     : 0,
+
+                "sent to split"  : 0,
+                "recv from split": 0,
+            },
+
+            "best acc"  : 0,
+            "best model": "",
+        }
+
+        initial_loading_start_time = time.perf_counter()
 
 
         if (self.config['logging']):
@@ -169,11 +219,39 @@ class Runner:
 
         client_optimizer = optim.SGD(
             client_model.parameters(), lr=0.01, momentum=0.9)
-
-        training_start_time = time.time()
+        
         num_rounds = rnd
 
+        initial_loading_end_time = time.perf_counter()
+        metrics['initial loading time'] = initial_loading_end_time - initial_loading_start_time
+        print(f"CLIENT_INITIAL_LOADING_TIME = {metrics['initial loading time']}")
+        logging.info(f"CLIENT_INITIAL_LOADING_TIME = {metrics['initial loading time']}")
+
+        running_time_start = time.perf_counter()
+
+        '''
+        ====================================================        
+        BEGIN TRAINING
+        ====================================================
+        '''
+
+
+
         for r in range(num_rounds):
+            metrics['round']['running time']    = 0
+            metrics['round']['training time']   = 0
+            metrics['round']['server work time']= 0
+            metrics['round']['testing time']    = 0
+            metrics['round']['fed wait time']   = 0
+            metrics['round']['init time']       = 0
+
+            metrics['round']['sent to split']   = 0
+            metrics['round']['recv from split'] = 0
+            metrics['round']['sent to fed']     = 0
+            metrics['round']['recv from fed']   = 0
+
+            round_running_start = time.perf_counter()
+            round_init_start = time.perf_counter()
 
             if r > 0:
                 client_model.load_state_dict(global_numpy_weights)
@@ -182,53 +260,82 @@ class Runner:
                 del global_numpy_weights
 
             for epoch in range(num_epochs):
+                metrics['epoch']['running time']     = 0
+                metrics['epoch']['training time']    = 0
+                metrics['epoch']['testing time']     = 0
+                metrics['epoch']['server work time'] = 0
+                
+                metrics['epoch']['sent to split'] = 0
+                metrics['epoch']['recv from split'] = 0
+                
+                epoch_running_start = time.perf_counter()
+
                 context = zmq.Context()
 
                 print("Connecting to server…")
                 socket = context.socket(zmq.REQ)
                 url = split_address + ":"+ str(split_port)
                 socket.connect(url)
-                
-                #send cut layer of this model
-                socket.send(str(config['cut_layer']).encode())
 
-                socket.recv()
+
+                #send cut layer of this model
+                send_cut = str(config['cut_layer']).encode()
+                socket.send(send_cut)
+                metrics['epoch']['sent to split'] += len(send_cut)
+
+                term = bool(int(socket.recv().decode()))
+                if term: 
+                    print("Terminate recieved.")
+                    logging.info("Terminate recieved.")
+                    self.term = True
+                    socket.close()
+                    context.term()
+                    break
+
 
                 iterations = len(trainloader)
                 send_iterations = str(iterations).encode()
                 socket.send(send_iterations)
+                metrics['epoch']['sent to split'] += len(send_iterations)
+                
 
-                socket.recv()
+                foo = socket.recv()
+                metrics['epoch']['recv from split'] += len(foo)
 
                 send_dataset_size = str(datasetsize_used).encode()
                 socket.send(send_dataset_size)
+                metrics['epoch']['sent to split'] += len(send_dataset_size)
 
                 socket.recv()
 
-                epoch_start_time = time.time()
+                epoch_train_start = time.perf_counter()
 
                 bar = tqdm(trainloader, desc=f"{r} {epoch}", unit='', ascii=True,
                            bar_format='{desc} {n_fmt}/{total_fmt} {percentage:3.0f}%|{bar}| {postfix}')
                 for data in bar:
-                    step_start_time = time.time()
+                    step_start_time = time.perf_counter()
                     inputs, labels = data[0].to(device), data[1].to(device)
 
                     #send labels to server
                     bytes_labels = convert.array_to_bytes(labels.cpu())
                     socket.send(bytes_labels)
+                    metrics['epoch']['sent to split'] += len(bytes_labels)
 
-                    socket.recv()
+                    foo = socket.recv()
+                    metrics['epoch']['recv from split'] += len(foo)
 
                     # Forward prop and sending activations to server
                     activations = client_model(inputs)
                     server_inputs = activations.detach().clone()
                     bytes_server_inputs = convert.array_to_bytes(server_inputs.cpu())
 
-                    server_work_time_start = time.time()
+                    server_work_time_start = time.perf_counter()
                     socket.send(bytes_server_inputs)
+                    metrics['epoch']['sent to split'] += len(bytes_server_inputs)
 
                     recv_grad = socket.recv()
-                    server_work_time_end = time.time()
+                    server_work_time_end = time.perf_counter()
+                    metrics['epoch']['recv from split'] += len(recv_grad)
 
                     numpy_grad = convert.bytes_to_array(recv_grad)
                     grad_output = torch.from_numpy(numpy_grad)
@@ -238,7 +345,9 @@ class Runner:
                     activations.backward(gradient=grad_output)
                     client_optimizer.step()
 
-                    step_end_time = time.time()
+
+                    #telemetry
+                    step_end_time = time.perf_counter()
                     total_one_step_time = step_end_time - step_start_time
                     server_work_time = server_work_time_end - server_work_time_start
 
@@ -254,15 +363,27 @@ class Runner:
 
                     #BATCH OVER
 
-                epoch_end_time = time.time()
-                total_one_epoch_time = epoch_end_time - epoch_start_time
+                epoch_train_end = time.perf_counter()
+                total_one_epoch_time = epoch_train_end - epoch_train_start
                 print("CLIENT_TOTAL_ONE_EPOCH_TIME = ", total_one_epoch_time)
                 logging.info('CLIENT_TOTAL_ONE_EPOCH_TIME = {:.3f}'.format(
                     total_one_epoch_time))
 
+                
+                epoch_running_end = time.perf_counter()
+
+                metrics['epoch']['running time']  = epoch_running_end - epoch_running_start
+                metrics['epoch']['training time'] = epoch_train_end - epoch_train_start
+
+                metrics['round']['training time']    += metrics['epoch']['training time']
+                metrics['round']['server work time'] += metrics['epoch']['server work time']
+            
 
                 socket.close()
                 context.term()
+
+            if self.term:
+                break
 
             ############################################################
             ########### Sending model to fedServer #####################
@@ -280,37 +401,186 @@ class Runner:
             print("Size of model weights (before) in bytes is:", getsizeof(weights))
             bytes_weights = convert.ordered_dict_to_bytes(weights)
             print("Size of model weights (after) in bytes is:", getsizeof(bytes_weights))
-            
-            #send state_dict
-            socket1.send(bytes_weights)
-            socket1.recv()
 
+            logging.info('Size of model weights (before) in bytes is: %s', (getsizeof(weights)))
+            logging.info('Size of model weights (after) in bytes is: %s', (getsizeof(bytes_weights)))
+            
+            send_weights_time_start = time.perf_counter()
+            socket1.send(bytes_weights)
+            names = socket1.recv()
+            metrics['round']['sent to fed'] += len(bytes_weights)
+            metrics['round']['recv from fed'] += len(names)
+
+            send_weights_time_end = time.perf_counter()
+            send_weights_time = send_weights_time_end - send_weights_time_start
+            logging.info("SEND_WEIGHTS_COMMUNICATION_TIME = {:.3f}".format(send_weights_time))
+            print("SEND_WEIGHTS_COMMUNICATION_TIME = {:.3f}".format(send_weights_time))
+            
+            
             # send dataset size for weighted avg
             socket1.send(send_dataset_size)
-            socket1.recv()
-            
-            #send cut layer to fed server
-            socket1.send(str(cut_layer).encode())
+            metrics['round']['sent to fed'] += len(send_dataset_size)
 
-            #recieve federated model
+            foo = socket1.recv()
+            metrics['round']['recv from fed'] += len(foo)
+
+            #send cut layer to fed server
+            send_cut_layer_size = str(cut_layer).encode()
+            socket1.send(send_cut_layer_size)
+            metrics['round']['sent to fed'] += len(send_cut_layer_size)
+
+            '''
+            ====================================================        
+            RECEIVE GLOBAL MODEL FROM FED SERVER
+            ====================================================
+            '''
+            weights_waiting_time_start = time.perf_counter()
 
             global_weights = socket1.recv()
-            
-            print("Size of global model weights (before) in bytes is:", getsizeof(global_weights))
-            global_numpy_weights = convert.bytes_to_dict(global_weights)
-            print("Size of global model weights (after) in bytes is:", getsizeof(global_numpy_weights))
+            metrics['round']['recv from fed'] += len(global_weights)
 
+            weights_waiting_time_end = time.perf_counter()
+            
             socket1.close()
             context1.term()
 
+            round_running_end = time.perf_counter()
+            metrics['round']['running time'] = round_running_end - round_running_start
+            metrics['round']['fed wait time'] = weights_waiting_time_end - weights_waiting_time_start
+
+            print("Global weights recieved from fedServer")
+            print("Size of global model weights (before) in bytes is:", getsizeof(global_weights))
+            
+            global_numpy_weights = convert.bytes_to_dict(global_weights)
+            print("Size of global model weights (after) in bytes is:", getsizeof(global_numpy_weights))
+
+            round_sent_to_servers = metrics['round']['sent to fed'] + metrics['round']['sent to split']
+            round_rcvd_from_servers = metrics['round']['recv from fed'] + metrics['round']['recv from split']
+            round_total = round_sent_to_servers + round_rcvd_from_servers
+
+            round_running_str     = f"Running time: {metrics['round']['running time']}"
+            round_training_str    = f"Training time: {metrics['round']['training time']}"
+            round_server_work_str = f"Server work time: {metrics['round']['server work time']}"
+            round_fed_wait_str    = f"Fed wait time: {metrics['round']['fed wait time']}"
+            round_init_str        = f"Round Initialization Time: {metrics['round']['init time']}"
+
+            round_sent_to_split_str   = f"Data sent to Split Server: {metrics['round']['sent to split']} bytes"
+            round_sent_to_fed_str     = f"Data sent to Fed Server: {metrics['round']['sent to fed']} bytes"
+            round_total_sent_str      = f"Total Sent: {round_sent_to_servers} bytes"
+            
+            round_recv_from_split_str = f"Data received from Split Server: {metrics['round']['recv from split']} bytes"
+            round_recv_from_fed_str   = f"Data received from Fed Server: {metrics['round']['recv from fed']} bytes"
+            round_total_recv_str      = f"Total Received: {round_rcvd_from_servers} bytes"
+
+            round_total_trans_str     = f"===== \nTotal Transmitted this Round: {round_total} byes"
+
+            print(f"======== Round {r} Summary ========")
+            print("Time statistics:")
+            print(round_running_str)
+            print(round_training_str)
+            print(round_server_work_str)
+            print(round_fed_wait_str)
+            print(round_init_str)
+            print("Networking statistics:")
+            print(round_sent_to_split_str)
+            print(round_sent_to_fed_str)
+            print(round_total_sent_str)
+            print(round_recv_from_split_str)
+            print(round_recv_from_fed_str)
+            print(round_total_recv_str)
+            print(round_total_trans_str)
+
+
+            logging.info(f"======== Round {r} Summary ========")
+            logging.info("Time statistics:")
+            logging.info(round_running_str)
+            logging.info(round_training_str)
+            logging.info(round_server_work_str)
+            logging.info(round_fed_wait_str)
+            logging.info(round_init_str)
+            logging.info("Networking statistics:")
+            logging.info(round_sent_to_split_str)
+            logging.info(round_sent_to_fed_str)
+            logging.info(round_total_sent_str)
+            logging.info(round_recv_from_split_str)
+            logging.info(round_recv_from_fed_str)
+            logging.info(round_total_recv_str)
+            logging.info(round_total_trans_str)
+
+            
+            metrics['round init time']     += metrics['round']['init time']
+            metrics['total training time'] += metrics['round']['training time']
+            metrics['server work time']    += metrics['round']['server work time']
+            metrics['fed wait time']       += metrics['round']['fed wait time']
+            
+            metrics['sent to split']   += metrics['round']['sent to split']
+            metrics['recv from split'] += metrics['round']['sent to fed']
+            metrics['sent to fed']     += metrics['round']['recv from split']
+            metrics['recv from fed']   += metrics['round']['recv from fed']
+           
+
             #END ROUND
 
+        running_time_end = time.perf_counter()
+        metrics['running time'] = running_time_end - running_time_start
+
+        total_sent_to_servers = metrics['sent to split'] + metrics['recv from split']
+        total_rcvd_from_servers = metrics['sent to fed'] + metrics['recv from fed']
+        total_data_transmitted = total_sent_to_servers + total_rcvd_from_servers
+
+        total_running_str         = f"Running time: {metrics['running time']}"
+        total_init_load_str       = f"Initial loading time: {metrics['initial loading time']}"
+        total_round_init_str      = f"Round init time: {metrics['round init time']}"
+        total_total_train_str     = f"Total training time: {metrics['total training time']}"
+        total_server_work_str     = f"Server work time: {metrics['server work time']}"
+        total_fed_wait_str        = f"Fed wait time: {metrics['fed wait time']}"
+
+        total_sent_split_str      = f"Data sent to Split Server: {metrics['sent to split']} bytes"
+        total_recv_split_str      = f"Data received from Split Server: {metrics['recv from split']} bytes"
+        total_send_str            = f"Total Sent: {total_sent_to_servers} bytes"
+        total_sent_fed_str        = f"Data sent to Fed Server: {metrics['sent to fed']} bytes"
+        total_recv_fed_str        = f"Data received from Fed Server: {metrics['recv from fed']} bytes"
+        total_recv_str            = f"Total Received: {total_rcvd_from_servers} bytes"
+        total_trans_str           = f"Total Transmitted: {total_data_transmitted} bytes"
 
 
-        training_end_time = time.time()
-        training_time = training_end_time - training_start_time
-        print("CLIENT_TOTAL_TRAINING_TIME = ", training_time)
-        logging.info('CLIENT_TOTAL_TRAINING_TIME = {:.3f}'.format(training_time))
+
+        print("======== Global Summary ========")
+        print("Time statistics:")
+        print(total_running_str)
+        print(total_init_load_str)
+        print(total_round_init_str)
+        print(total_total_train_str)
+        print(total_server_work_str)
+        print(total_fed_wait_str)
+        print("Networking statistics:")
+        print(total_sent_split_str)
+        print(total_recv_split_str)
+        print(total_send_str)
+        print(total_sent_fed_str)
+        print(total_recv_fed_str)
+        print(total_recv_str)
+        print(total_trans_str)
+        print("Model statistics:")
+
+
+        logging.info("======== Global Summary ========")
+        logging.info("Time statistics:")
+        logging.info(total_running_str)
+        logging.info(total_init_load_str)
+        logging.info(total_round_init_str)
+        logging.info(total_total_train_str)
+        logging.info(total_server_work_str)
+        logging.info(total_fed_wait_str)
+        logging.info("Networking statistics:")
+        logging.info(total_sent_split_str)
+        logging.info(total_recv_split_str)
+        logging.info(total_send_str)
+        logging.info(total_sent_fed_str)
+        logging.info(total_recv_fed_str)
+        logging.info(total_recv_str)
+        logging.info(total_trans_str)
+        logging.info("Model statistics:")
 
 
 #################################################################################################################################

@@ -114,9 +114,6 @@ class Runner:
                     x = l(x)
                 return x
 
-        config = {"cut_layer": int(cut_layer), "logits": 10}
-        model = ResNet18Client(config).to(device)
-
         ##################################################################
 
         if (self.config['logging']):

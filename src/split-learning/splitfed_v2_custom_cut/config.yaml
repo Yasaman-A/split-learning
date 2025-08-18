@@ -1,10 +1,17 @@
 logging: True
+log_dir: "./logs"
+model_dir: "./models"
+
 #cpu OR gpu
 device: gpu
-client_total: 6
+client_total: 5
 epoch: 5
 round: 15
 batch_size: 32
+
+patience: 3
+test_cut_layer: 4
+
 # n for no_split, s: for getting split i from data server, Any number for the number of i.i.d splits.
 split_type: s
 split_server: 
@@ -15,4 +22,4 @@ fed_server:
   server_start_port: 4445
 data_server:
   server_address: http://127.0.0.1:8000
-  output_file: output.pkl
+  output_file: t_s_f_5.pkl

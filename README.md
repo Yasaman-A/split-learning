@@ -133,7 +133,7 @@ Line 5 of the file installs torch and torchvision with a cuda wheel. This line m
 changed depending on the hardware available to the docker engine.
 
 2. docker-compose
-A docker-compose file can be found in the repository root. This file starts up the Split Server, the Fed server, and as many clients as are listed.
+two docker-compose files can be found in the repository root. One corresponds to v1 and the other to v2. This file starts up the Split Server, the Fed server, and as many clients as are listed.
 
 Of note within this docker-compose file:
 - Expects there to be a config.yaml file in the repo root folder. This is the config that will be used by all the containers. Within /src/ there is a dummy config.yaml that ensures a folder called "config.yaml" isn't created when docker attempts to create a link to the config on the host.

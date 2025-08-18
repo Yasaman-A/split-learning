@@ -160,12 +160,12 @@ class Runner:
 
             num_epochs = epochs
 
-            round_start_time = time.time()
+            round_start_time = time.perf_counter()
             for epoch in range(num_epochs):
-                epoch_start_time = time.time()
+                epoch_start_time = time.perf_counter()
 
                 for j in range(recv_iterations):
-                    step_start_time = time.time()
+                    step_start_time = time.perf_counter()
                     print(f"***TH - {thread_no}***  {epoch} {j}")
 
                     #receive labels
@@ -200,7 +200,7 @@ class Runner:
                     socket.send(bytes_loss)
                     
                     #telemetry
-                    step_end_time = time.time()
+                    step_end_time = time.perf_counter()
                     total_one_step_time = step_end_time - step_start_time
                     print(f"***TH - {thread_no}***  SERVER_TOTAL_ONE_STEP_TIME = {total_one_step_time:.3f}, loss: {loss.item():.3f}")
                     logging.info(f"***TH - {thread_no}***  SERVER_TOTAL_ONE_STEP_TIME = {total_one_step_time:.3f}, loss: {loss.item():.3f}")
@@ -255,14 +255,14 @@ class Runner:
 
                     ################################################################################
 
-                epoch_end_time = time.time()
+                epoch_end_time = time.perf_counter()
                 total_one_epoch_time = epoch_end_time - epoch_start_time
                 print(f"***TH - {thread_no}***  SERVER_TOTAL_ONE_EPOCH_TIME = {total_one_epoch_time:.3f}")
                 logging.info(f"***TH - {thread_no}***  SERVER_TOTAL_ONE_EPOCH_TIME = {total_one_epoch_time:.3f}")
 
                 ##################################################################################################################
 
-            round_end_time = time.time()
+            round_end_time = time.perf_counter()
             round_time = round_end_time - round_start_time
             print(f"***TH - {thread_no}***  SERVER_ROUND_TRAINING_TIME = {round_time:.3f}")
             logging.info(f"***TH - {thread_no}***  SERVER_ROUND_TRAINING_TIME = {round_time:.3f}")
@@ -313,7 +313,7 @@ class Runner:
             best_model = ""
             patience = 0
 
-            training_start_time = time.time()
+            training_start_time = time.perf_counter()
             for r in range(num_rounds):
                 print("New round started..")
                 thrs = []
@@ -474,12 +474,13 @@ class Runner:
             # fed_context.term()
             # print("socket closed")
 
-            training_end_time = time.time()
+            training_end_time = time.perf_counter()
             training_time = training_end_time - training_start_time
             print(f"SERVER_TOTAL_TRAINING_TIME = {training_time:.3f}")
             logging.info(f"SERVER_TOTAL_TRAINING_TIME = {training_time:.3f}")
 
             print(f"best model was: {best_model} with an accuracy of {best_accuracy}.")
+            logging.info((f"best model was: {best_model} with an accuracy of {best_accuracy}."))
 
 
             context.term()
