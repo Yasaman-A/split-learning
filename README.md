@@ -57,8 +57,31 @@ Clients in this architecture can have different cut layers. The current implemen
 - `python -m src.split-learning --mode splitfed_v1_custom_cut --fed`
 - `python -m src.split-learning --mode splitfed_v1_custom_cut --client 1 --extra 2`
 
-
 ## Splitting Data
+Multiple data splitting strategies are implemented based on fedArtML library [[3]](#3). These scripts can create Label, Feature, and Quantity skews for the non-iid data.
+
+To run the scripts from the  `root` folder use the following commands. 
+
+
+`python -m src.split-learning --generate --data_type label_skew_dirichlet --alpha_label_split 0.1 --num_clients 3 --batch_size 128`
+
+`python -m src.split-learning --generate --data_type label_skew_percentage --percentage_skew 0.5 --num_clients 2 --batch_size 128`
+
+`python -m src.split-learning --generate --data_type feature_skew_dirichlet --alpha_feat_split 0.1 --num_clients 3 --batch_size 128`
+
+`python -m src.split-learning --generate --data_type feature_skew_gaussian --sigma_noise 1 --num_clients 3 --batch_size 128`
+
+`python -m src.split-learning --generate --data_type quantity_skew_dirichlet --alpha_quant_split 0.1 --num_clients 3 --batch_size 128`
+
+`python -m src.split-learning --generate --data_type quantity_skew_minsize_dirichlet --alpha_quant_split 0.1 --num_clients 3 --batch_size 128`
+
+
+
+If parameters are not passed, then the default values will be used. 
+
+Running any of the data split scripts will result in *output.pickle* file. This pickle file should be placed on the data server directory. Data server can be started using: `python -m http.server port_number`, e.g. `python -m http.server 8000`
+
+## Splitting Data (OLD)
 Running non-iid.py will resolve in the number of non-idd data splits. Using `--generate` you can run the non-iid.py script from the `root` folder which generates data splits:
 `python -m src.split-learning --generate` this code can accept three parameters: `--classes_pc`, `--num_clients`, and `--batch_size`. If any of these parameters are not passed, then the default values of 2, 6, 128 will be used. To generate data with non-default values:
 `python -m src.split-learning --generate --classes_pc 4 --num_clients 6 --batch_size 128`
@@ -84,3 +107,7 @@ Vepakomma P, Gupta O, Swedish T, Raskar R. Split learning for health: Distribute
 
 <a id="2">[2]</a> 
 Thapa C, Arachchige PC, Camtepe S, Sun L. Splitfed: When federated learning meets split learning. In Proceedings of the AAAI Conference on Artificial Intelligence 2022 Jun 28 (Vol. 36, No. 8, pp. 8485-8493).
+
+<a id="3">[3]</a> 
+Jimenez GGM, Anagnostopoulos A, Chatzigiannakis I, and Vitaletti A. Fedartml: A tool to facilitate the
+generation of non-iid datasets in a controlled way to support federated learning research. IEEE Access, 2024.
