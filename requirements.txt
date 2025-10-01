@@ -6,3 +6,5 @@ pyzmq==26.1.0
 zmq==0.0.0
 tqdm==4.66.5
 pyyaml
+Scikit-learn
+fedartml
