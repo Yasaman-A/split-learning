@@ -21,6 +21,7 @@ from .datagen.quantity_skew_minsize_dirichlet import (
     run as quantity_skew_minsize_dirichlet_run,
 )
 from .datagen.feature_skew_gaussian import run as feature_skew_gaussian_run
+from .datagen.label_skew_percentage import run as label_skew_percentage_run
 import argparse
 
 
@@ -52,6 +53,7 @@ class Main:
                 "non_iid",
                 "feature_skew_dirichlet",
                 "label_skew_dirichlet",
+                "label_skew_percentage",
                 "quantity_skew_dirichlet",
                 "quantity_skew_minsize_dirichlet",
                 "feature_skew_gaussian",
@@ -89,6 +91,12 @@ class Main:
             help="Sigma for Gaussian noise (for feature_skew_gaussian).",
         )
         parser.add_argument(
+            "--percentage_skew",
+            type=float,
+            default=0.5,
+            help="Percentage skew (for label_skew_percentage).",
+        )
+        parser.add_argument(
             "--num_clients", type=int, default=6, help="Number of clients."
         )
         parser.add_argument("--batch_size", type=int, default=128, help="Batch size.")
@@ -111,6 +119,13 @@ class Main:
                 )
                 label_skew_dirichlet_run(
                     args.alpha_label_split, args.num_clients, args.batch_size
+                )
+            elif args.data_type == "label_skew_percentage":
+                print(
+                    f"Generating label skew data with percentage_skew={args.percentage_skew}"
+                )
+                label_skew_percentage_run(
+                    args.percentage_skew, args.num_clients, args.batch_size
                 )
             elif args.data_type == "quantity_skew_dirichlet":
                 print(
