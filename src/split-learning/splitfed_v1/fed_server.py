@@ -9,23 +9,14 @@ arg1 --> CONFIG_FILE_PATH
 
 import copy
 import threading
-import torchvision
-import torchvision.transforms as transforms
-import torch.nn as nn
-import torch.nn.functional as F
-from torchvision import models
-import torch.optim as optim
-from torch.autograd import Variable
 import time
 import zmq
 import torch
-# from .utils import ordered_dict_to_bytes, bytes_to_dict
 from ..lib import convert
-import sys
 from sys import getsizeof
 import yaml
 import logging
-# from objsize import get_deep_size
+import os
 
 class Runner:
     def __init__(self, config_path) -> None:
@@ -34,22 +25,28 @@ class Runner:
             print("Read successful")
     
     def run(self):
-        client_total = self.config["client_total"]
-        fed_port = self.config["fed_server"]["server_start_port"]
-        rnd = self.config["round"]
+        client_total = self.config['client_total']
+        fed_port = self.config['fed_server']['server_start_port']
+        rnd = self.config['round']
 
-        if (self.config["logging"]):
+        if (self.config['logging']):
+            log_path = os.path.join(
+                self.config.get("log_dir", "./"),
+                f"./fed_server_{client_total}_{fed_port}_{rnd}.log"
+            )
             # Create and configure logger
-            logging.basicConfig(filename="./fed_server_" + str(client_total) + "_" + 
-                                str(fed_port) + "_" + str(rnd) + ".log",
-                                format='%(asctime)s %(message)s',
-                                filemode='a')
-            # Creating an object
+            logging.basicConfig(
+                filename=log_path,
+                format='%(asctime)s %(message)s',
+                filemode='a'
+            )
             logger = logging.getLogger()
             # Setting the threshold of logger to DEBUG
             logger.setLevel(logging.INFO)
-            logging.info('Parameters (FED_SERVER_LOG) ---------- [TOTAL_CLIENTS --> {}, STARTING_SERVER_PORT --> {}, ROUNDS --> {}] ---------- '.format(
-                str(client_total), str(fed_port), str(rnd)))
+            logging.info(
+                f"Parameters (FED_SERVER_LOG) ---------- [TOTAL_CLIENTS --> {client_total}, "
+                f"STARTING_SERVER_PORT --> {fed_port}, ROUNDS --> {rnd}] ----------"
+            )
 
 
         def average_weights(w, datasize):
@@ -64,15 +61,13 @@ class Runner:
             w_avg = copy.deepcopy(w[0])
 
             for key in w_avg.keys():
-                for i in range(1, len(w)):        ## IMP
+                for i in range(1, len(w)):
                     w_avg[key] += w[i][key]
                 w_avg[key] = torch.div(w_avg[key], float(sum(datasize)))
 
             return w_avg
 
 
-        # Binding socket with retry to overcome "address in use" error
-        # Binding happens only after the address is already not in use 
         def socket_bind_retry(socket, url, max_retries=10, delay=5):
             retries = 0
             while retries < max_retries:
@@ -91,21 +86,17 @@ class Runner:
             return False
 
 
-        def get_weights(url, context, thread_no):
+        def client_worker(sync_params, url, context, thread_no):
             """ Worker routine """
 
             global client_global_weights
             global client_weights
             global datasetsize_client
 
-            # Socket to talk to dispatcher
-            # context = zmq.Context()
-            socket = context.socket(zmq.REP)
+            lock, barrier, event = sync_params
 
-            # socket.connect(worker_url)
-            # socket.connect("tcp://*:5555")
+            socket = context.socket(zmq.REP)
             
-            # Binding socket with retry to overcome "address in use" error
             if not socket_bind_retry(socket, url):
                 print(f"Failed binding to {url}.")
                 return
@@ -116,7 +107,7 @@ class Runner:
             weights = socket.recv()
             print("Weights recieved from client {}".format(thread_no))
             numpy_weights = convert.bytes_to_dict(weights)
-            client_weights.append(numpy_weights)
+            with lock: client_weights.append(numpy_weights)
 
             msg = "weights_recv"
             send_msg = msg.encode()
@@ -124,54 +115,27 @@ class Runner:
 
             recv_dataset_size = socket.recv()
             dataset_size = int(recv_dataset_size.decode())
-            datasetsize_client.append(dataset_size)
+            with lock: datasetsize_client.append(dataset_size)
             print(dataset_size)
 
-            msg = "dataset_size_recv"
-            send_msg = msg.encode()
-            socket.send(send_msg)
+            barrier.wait() #ensure all threads are done
 
-            ##*****************************************************************************************************************
-
-            print("Worker done******************************")
-
-            socket.close()
-
-
-        def send_weights(url, context, thread_no):
-            """ Worker routine """
-
-            global client_global_weights
-
-            # Socket to talk to dispatcher
-            # context = zmq.Context()
-            socket = context.socket(zmq.REP)
-
-            # socket.connect(worker_url)
-            # socket.connect("tcp://*:5555")
-            
-            # Binding socket with retry to overcome "address in use" error
-            # socket.bind(url)
-            if not socket_bind_retry(socket, url):
-                print(f"Failed binding to {url}.")
-                return
-
-            ##*****************************************************************************************************************
-
-            ## dummy recv
-            names = socket.recv()
-            recv_names = names.decode()
+            event.wait() #wait for server to process model
 
             print("Size of global model weights (before) in bytes is:", getsizeof(client_global_weights))
+            logging.info(f"Size of global model weights (before) in bytes is: {getsizeof(client_global_weights)}")
             global_bytes_weights = convert.ordered_dict_to_bytes(client_global_weights)
             print("Size of global model weights (after) in bytes is:",
                   getsizeof(global_bytes_weights))
-            
+            logging.info(f"Size of global model weights (after) in bytes is: {getsizeof(global_bytes_weights)}")
+
             socket.send(global_bytes_weights)
-            print("Weights send to client {}".format(thread_no))
+            print(f"Weights sent to client {thread_no}")
+            logging.info(f"Weights sent to client {thread_no}")
 
             ##*****************************************************************************************************************
-            print("Worker done******************************")
+            print(f"Worker {thread_no} done******************************")
+            logging.info(f"Worker {thread_no} done******************************")
 
             socket.close()
 
@@ -188,53 +152,69 @@ class Runner:
             total_threads = client_total
             port_no = fed_port
             connection_url = ["tcp://*:" + str(fed_port+i) for i in range(client_total)]
-            # connection_url = ["tcp://*:5555", "tcp://*:5556"]
 
             num_rounds = rnd
             context = zmq.Context()
 
             for r in range(num_rounds):
                 print("New round started..")
+                logging.info("New round started..")
                 thrs = []
 
                 client_weights.clear()
                 datasetsize_client.clear()
 
+                lock = threading.Lock()
+                barrier = threading.Barrier(parties = total_threads + 1)
+                event = threading.Event()
+                sync_params = (lock, barrier, event)
+
+                logging.info("Launching reciever threads...")
                 # Launch pool of worker threads
                 for i in range(total_threads):  # this defines how many clients can connect
-                    thread = threading.Thread(target=get_weights, args=(
-                        connection_url[i], context, i+1))
+                    thread = threading.Thread(target=client_worker, 
+                                              args=(
+                                                sync_params,
+                                                connection_url[i], 
+                                                context, 
+                                                i+1)
+                        )
                     thrs.append(thread)
                     thread.start()
 
-                for thread in thrs:  # have to check when it will run all epochs..
-                    thread.join()
+                barrier.wait()
 
                 print("Length of client weights:", len(client_weights))
+                logging.info(f"Length of client weights: {len(client_weights)}")
                 print("Length of dataset:", len(datasetsize_client))
+                logging.info(f"Length of dataset: {len(datasetsize_client)}")
 
                 # Client models weighted averaging..
                 client_global_weights = average_weights(client_weights, datasetsize_client)
                 print("Global clients calculated..")
+                logging.info("Global clients calculated..")
 
-                model_save_name = "./client_fedAvg_model_r" + str(r) + "_" + str(client_total) + "_" + str(fed_port) + "_" + str(rnd) + ".pt"
+                model_save_name = os.path.join(
+                    self.config.get("model_dir", "./"),
+                    f"./client_fedAvg_model_r_{r}_{client_total}_{fed_port}_{rnd}.pt"
+                )
                 torch.save(client_global_weights, model_save_name)
                 print("MODEL_SAVED.")
 
+                event.set()
 
-                thrs = []
-                # Launch pool of worker threads
-                for i in range(total_threads):  # this defines how many clients can connect
-                    thread = threading.Thread(target=send_weights, args=(
-                        connection_url[i], context, i+1))
-                    thrs.append(thread)
-                    thread.start()
-
-                for thread in thrs:  # have to check when it will run all epochs..
+                for no, thread in enumerate(thrs):
                     thread.join()
+                    logging.info(f"Thread {no} joined.")
+                
+                logging.info("All threads joined.")
+                
+                if self.config['device'] != "cpu":
+                    time.sleep(1) #gpu is too fast for ZMQ; race condition occurs and fed server terminates.
 
                 print("All threads ended..")
             print("All rounds ended..")
+            logging.info("All rounds ended..")
 
             context.term()
 

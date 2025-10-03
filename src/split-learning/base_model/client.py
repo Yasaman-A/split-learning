@@ -89,6 +89,11 @@ class Runner:
                 self.model = nn.ModuleList(self.model.children())
                 self.model = nn.Sequential(*self.model)
 
+
+                num_ftrs = self.model.fc.in_features
+                self.model.fc = nn.Sequential(nn.Flatten(),
+                                                  nn.Linear(num_ftrs, self.logits))
+
             # Explain forward (actually used during the execution of the neural network at runtime)
             def forward(self, x):
                 for i, l in enumerate(self.model):

@@ -1,222 +1,140 @@
-import torch
 import torch.nn as nn
 from torchvision import models
 import copy
-from locale import atoi
+import operator
 
-# model_path = r"G:\MRU\Split Learning\zeroMQ\splitFed\avg\client_fedAvg_model_r1_5_4445_10.pt"
-# model_path = r"G:\MRU\Split Learning\zeroMQ\experiments\exp1\client_model_5555_cpu_3_10.pt"
-
-
-class ResNet18Client(nn.Module):
-    """docstring for ResNet"""
-
-    # Explain initialize (listing the neural network architecture and other related parameters)
-    def __init__(self):
-        super(ResNet18Client, self).__init__()
-        # Explain this line
-        # self.cut_layer = config["cut_layer"]
-
-        # Explain this line
-        self.model = models.resnet18(pretrained=False)
-
-        self.model = nn.ModuleList(self.model.children())
-        self.model = nn.Sequential(*self.model)
-
-class ResNet18Server(nn.Module):
+class ResNet18(nn.Module):
     """docstring for ResNet"""
 
     def __init__(self):
-        super(ResNet18Server, self).__init__()
+        super(ResNet18, self).__init__()
 
-        self.model = models.resnet18(pretrained=False)
-        num_ftrs = self.model.fc.in_features
+        self.model = models.resnet18(weights=None)
 
         self.logits = 10
-
-        # Explain this part
+        num_ftrs = self.model.fc.in_features
         self.model.fc = nn.Sequential(nn.Flatten(),
-                                        nn.Linear(num_ftrs, self.logits))
+                                                  nn.Linear(num_ftrs, self.logits))
 
-        self.model = nn.ModuleList(self.model.children())
-        self.model = nn.Sequential(*self.model)
-
+        self.layers = list(self.model.children())
 
 
+def average_models(server: bool, model_list, datasizes, cut_layer_list):
+    """
+    Aggregates all input models into one model.
 
-class Cl_Custom_Avg(nn.Module):
-    """docstring for ResNet"""
+    Args:
+        server (bool): Flag whether averaging as a server model (False = client averaging).
+        model_list (list): List of all relevant models to aggregate.
+        datasizes (list): List of datasizes for each model (for weighted aggregation).
+        cut_layer_list (list): List of cut layers for each model.
 
-    # Explain initialize (listing the neural network architecture and other related parameters)
-    def __init__(self):
-        super(Cl_Custom_Avg, self).__init__()
-        # Explain this line
-        # self.cut_layer = config["cut_layer"]
+    Notes:
+        model_list, datasize, and cut_layer_list indexes should be index-aligned by model.
+    """
+    if server: #Find earliest cut for server aggregation.
+        split_idx = cut_layer_list.index(min(cut_layer_list))
+        comparator = operator.gt
+    else:      #Find latest cut for client aggregation.
+        split_idx = cut_layer_list.index(max(cut_layer_list))
+        comparator = operator.le
 
-        # Explain this line
-        self.model = models.resnet18(pretrained=False)
+    weights_avg = copy.deepcopy(model_list[split_idx].state_dict())
 
-        self.model = nn.ModuleList(self.model.children())
-        self.model = nn.Sequential(*self.model)
-
-
-    def client_custom_avg(self, model_list, datasize, cut_layer_list):
-
-        ## Select the model with larger cut layer for finding average........
-        # w_avg = copy.deepcopy(w[-1])
-        # model with bigger cut layer..
-
-        max_index = cut_layer_list.index(max(cut_layer_list))
-        w_avg = copy.deepcopy(model_list[max_index].state_dict())
-
-
-        ### for multiplying (weighted average)............
-        for i, data in enumerate(datasize):
-            tt = model_list[i].state_dict()
-            for key in tt.keys():
-                tt[key] *= data
-            model_list[i].load_state_dict(tt)
-            del tt
+    #multiply weights by allocated data for the weighted averaging
+    for i, data in enumerate(datasizes):
+        state_dict = model_list[i].state_dict()
+        for key in state_dict.keys():
+            state_dict[key] *= data
+        model_list[i].load_state_dict(state_dict)
 
 
-        # for l, n in enumerate(w[0].children()):
-        for l, n in enumerate(self.model):
-            # print("\nINDEX----", l)
-            
-            for name, wt in n.named_parameters():
-                name = "model." + str(l) + "." + name
-                # print("Index--> ", l, "NAME-->", name)
+    weight_exposure = {}
 
+
+    #for each layer, sum the weights from models that worked on those layers.
+    for layer_idx, (layer_name, layer) in enumerate(model_list[split_idx].model.named_children()):
+        for key in model_list[split_idx].state_dict().keys():
+            if key.startswith(f"model.{layer_name}"):
                 weight_value = 0
-                summation = 0
+                weight_size_sum = 0
 
-                flag = False
-
-                for i in range(0, len(model_list)):
-                    print("cut_layer_list1" + str(i+1) + ":" + str(cut_layer_list[i]))
-                    if(cut_layer_list[i] >= l):
-                        # print("INSIDE IF>>>")
-
-                        flag = True
-                        weight_value += model_list[i].state_dict()[name]
-                        summation += datasize[i]
+                for model_idx, model in enumerate(model_list):
+                        #comparator is:
+                        #   server: >
+                        #   client: <=
+                        #if current_layer vs cut_layer_list
+                    if comparator(layer_idx, int(cut_layer_list[model_idx])):
+                        weight_value += model.state_dict()[key]
+                        weight_size_sum += datasizes[model_idx]
                 
-                if (flag == True):
-                    w_avg[name] = torch.div(weight_value, float(summation))
-                    # print("--------------------------------")
-
-                del weight_value
-                del summation
-
-        return w_avg
+                if weight_size_sum > 0:
+                    weights_avg[key] = weight_value / weight_size_sum
+                    weight_exposure[key] = weight_exposure.get(key, 0) + weight_size_sum
 
 
-class Serv_Custom_Avg(nn.Module):
-    """docstring for ResNet"""
-
-    # Explain initialize (listing the neural network architecture and other related parameters)
-    def __init__(self):
-        super(Serv_Custom_Avg, self).__init__()
-        # Explain this line
-        # self.cut_layer = config["cut_layer"]
-
-        # Explain this line
-        self.model = models.resnet18(pretrained=False)
-        num_ftrs = self.model.fc.in_features
-
-        self.logits = 10
-
-        # Explain this part
-        self.model.fc = nn.Sequential(nn.Flatten(),
-                                      nn.Linear(num_ftrs, self.logits))
-
-        self.model = nn.ModuleList(self.model.children())
-        self.model = nn.Sequential(*self.model)
+    return weights_avg, weight_exposure
 
 
-    def server_custom_avg(self, model_list, datasize, cut_layer_list):
+def custom_model_avg(server: bool, state_dicts, data_size, cut_layer_list):
+    """
+    Creates a custom average model given a list of state dicts, data sizes, and cut layers.
+    Chooses between averaging a server or client model based on the input "server" flag.
 
-        ## Select the model with smaller cut layer for finding average........
-        # w_avg = copy.deepcopy(w[-1])
-        # model with smaller cut layer..
+    Args:
+        server (bool): Flag to average as a server (True) or client (False) model.
+        state_dicts (list): List of state dicts for each model to aggregate.
+        data_size (list): List of data sizes each model trained on (used for weighted averaging).
+        cut_layer_list (list): List of cut layers for each model.
 
-        min_index = cut_layer_list.index(min(cut_layer_list))
-        w_avg = copy.deepcopy(model_list[min_index].state_dict())
-
-        ### for multiplying (weighted average)............
-        for i, data in enumerate(datasize):
-            tt = model_list[i].state_dict()
-            for key in tt.keys():
-                tt[key] *= data
-            model_list[i].load_state_dict(tt)
-            del tt
-
-        # for l, n in enumerate(w[0].children()):
-        for l, n in enumerate(self.model):
-            # print("\nINDEX----", l)
-
-            for name, wt in n.named_parameters():
-                name = "model." + str(l) + "." + name
-                # print("Index--> ", l, "NAME-->", name)
-
-                weight_value = 0
-                summation = 0
-
-                flag = False
-
-                for i in range(0, len(model_list)):
-                    print("cut_layer_list" + str(i+1) + ":" + str(cut_layer_list[i]))
-                    if(atoi(cut_layer_list[i]) < l):
-                        # print("INSIDE IF>>>")
-
-                        flag = True
-                        weight_value += model_list[i].state_dict()[name]
-                        summation += datasize[i]
-
-                if (flag == True):
-                    w_avg[name] = torch.div(weight_value, float(summation))
-                    # print("--------------------------------")
-
-                del weight_value
-                del summation
-
-        return w_avg
-
-
-
-
-
-def client_custom_avg_model(weights, data_size, cut_layer):
-    trained_models = []
+    Notes:
+        state_dicts, data_size, and cut_layer_list indexes should be index-aligned by model.
+    """
+    #kept in case asymmetrical model definitions.
+    #if used, change defn = ModelFoo() to defn = model_container
+    # if server:
+    #     model_container = ResNet18Server
+    # else:
+    #     model_container = ResNet18Client
     
-    ## Putting weights to model architectures....
-    for i in range(0, len(weights)):
-        m = ResNet18Client()
-        m.load_state_dict(weights[i])
-
-        trained_models.append(m)
-        del m
-
-    # data_size = [5000, 10000, 15000]
-    # cut_layer = [3, 4, 5]
-
-    avg_model = Cl_Custom_Avg()
-    return avg_model.client_custom_avg(trained_models, data_size, cut_layer)
-
-
-def server_custom_avg_model(weights, data_size, cut_layer):
     trained_models = []
 
-    ## Putting weights to model architectures....
-    for i in range(0, len(weights)):
-        m = ResNet18Server()
-        m.load_state_dict(weights[i])
+    for state_dict in state_dicts:
+        defn = ResNet18()
+        defn.load_state_dict(state_dict)
+        trained_models.append(defn)
 
-        trained_models.append(m)
-        del m
+    avg_model, avg_exposure = average_models(server, trained_models, data_size, cut_layer_list)
 
-    # data_size = [5000, 10000, 15000]
-    # cut_layer = [3, 4, 5]
+    return avg_model, avg_exposure
 
-    avg_model = Serv_Custom_Avg()
-    return avg_model.server_custom_avg(trained_models, data_size, cut_layer)
+
+
+
+def combine_fed_avg_models(client_fedavg, client_exposure, server_fedavg, server_exposure):
+    '''
+    Merges the federated client model and federated server model into one combined
+    fedearted model.
+
+    Currently hardcoded to use symmetrical ResNet18.
+
+    Args:
+        client_fedavg (nn.Module): State dict from the federated client model
+        client_exposure (dict): dict containing the magnitude of data key in the state dict was exposed to
+        server_fedavg (nn.Module): State dict from the federated server model
+        server_exposure (dict): dict containing the magnitude of data key in the state dict was exposed to
+    
+    '''
+    combined = ResNet18()
+    state_dict = combined.state_dict()
+
+
+    for i, key in enumerate(client_fedavg.keys()):
+        c_exposure = client_exposure.get(key, 0)
+        s_exposure = server_exposure.get(key, 0)
+        total = c_exposure + s_exposure
+
+        state_dict[key] = (client_fedavg[key] * c_exposure + server_fedavg[key] * s_exposure) / total
+    
+    return state_dict
+
