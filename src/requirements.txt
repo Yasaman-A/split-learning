@@ -6,3 +6,4 @@ pyzmq==27.0.0
 #torch==2.6.0+cu126
 #torchvision==0.21.0+cu126
 tqdm==4.66.5
+scikit-learn
