@@ -66,6 +66,30 @@ Clients in this architecture can have differing cut layers. The current implemen
 
 
 ## Splitting Data
+Multiple data splitting strategies are implemented based on fedArtML library [[3]](#3). These scripts can create Label, Feature, and Quantity skews for the non-iid data.
+
+To run the scripts from the  `root` folder use the following commands. 
+
+
+`python -m src.split-learning --generate --data_type label_skew_dirichlet --alpha_label_split 0.1 --num_clients 3 --batch_size 128`
+
+`python -m src.split-learning --generate --data_type label_skew_percentage --percentage_skew 0.5 --num_clients 2 --batch_size 128`
+
+`python -m src.split-learning --generate --data_type feature_skew_dirichlet --alpha_feat_split 0.1 --num_clients 3 --batch_size 128`
+
+`python -m src.split-learning --generate --data_type feature_skew_gaussian --sigma_noise 1 --num_clients 3 --batch_size 128`
+
+`python -m src.split-learning --generate --data_type quantity_skew_dirichlet --alpha_quant_split 0.1 --num_clients 3 --batch_size 128`
+
+`python -m src.split-learning --generate --data_type quantity_skew_minsize_dirichlet --alpha_quant_split 0.1 --num_clients 3 --batch_size 128`
+
+
+
+If parameters are not passed, then the default values will be used. 
+
+Running any of the data split scripts will result in *output.pickle* file. This pickle file should be placed on the data server directory. Data server can be started using: `python -m http.server port_number`, e.g. `python -m http.server 8000`
+
+## Splitting Data (OLD)
 datamanager.py exists to grab and split datasets among a number of clients. The datamanger saves to .pkl files: the trainset, {output_name}.pkl; and the test set {output_name}_test.pkl. This code can be easily run via the following command  
 `python -m src.split-learning --generate`  
 This code can accept the following parameters:  
@@ -152,3 +176,7 @@ Vepakomma P, Gupta O, Swedish T, Raskar R. Split learning for health: Distribute
 
 <a id="2">[2]</a> 
 Thapa C, Arachchige PC, Camtepe S, Sun L. Splitfed: When federated learning meets split learning. In Proceedings of the AAAI Conference on Artificial Intelligence 2022 Jun 28 (Vol. 36, No. 8, pp. 8485-8493).
+
+<a id="3">[3]</a> 
+Jimenez GGM, Anagnostopoulos A, Chatzigiannakis I, and Vitaletti A. Fedartml: A tool to facilitate the
+generation of non-iid datasets in a controlled way to support federated learning research. IEEE Access, 2024.
