@@ -85,11 +85,11 @@ function change_setup_config() {
 # 5 = split_type
 # 6 = patience
 # 7 = test_cut_layer
-# 8 = custom_cut_mode
+# 8 = paradigm selection
 
 function update_hyperparameters() {
 
-    if [[ $8 == "false" ]]; then
+    if [[ $8 == 0 ]]; then
         yq -yi ".cut_layer = $2" "$1"
     fi    
     yq -yi ".epoch = $3" "$1"
@@ -104,7 +104,8 @@ function update_hyperparameters() {
 #run_client
 #inputs: $1 = output directory
 #        $2 = current iteration
-#        $3 = custom split information
+#        $3 = paradigm selection
+#        $4 = custom split information
 function run_client() {
     
     cd /$HOME/split-learning
@@ -115,12 +116,21 @@ function run_client() {
         
         collect_data "$1" "$2"
         
-        if [[ "$3" != *','* ]]; then
-            $PYTHON -m src.split-learning --mode splitfed_v1 --server
-        else
-            $PYTHON -m src.split-learning --mode splitfed_v1_custom_cut --server --extra $3
-        fi
-
+        case "$3" in
+            0)
+                $PYTHON -m src.split-learning --mode splitfed_v1 --server
+                ;;
+            1)
+                $PYTHON -m src.split-learning --mode splitfed_v1_custom_cut --server --extra "$4"
+                ;;
+            2)
+                $PYTHON -m src.split-learning --mode splitfed_v2_custom_cut --server
+                ;;
+            *)
+                echo "Invalid mode: $3" >&2
+                exit 1
+                ;;
+        esac
         kill $server_pid
 
     elif [[ "$device" == "fed-server" ]]; then
@@ -133,26 +143,43 @@ function run_client() {
         echo "Starting the fed server."
         collect_data "$1" "$2"
     
-        if [[ "$3" != *','* ]]; then
-            $PYTHON -m src.split-learning --mode splitfed_v1 --fed
-        else
-            $PYTHON -m src.split-learning --mode splitfed_v1_custom_cut --fed
-        fi
+        case "$3" in
+            0)
+                $PYTHON -m src.split-learning --mode splitfed_v1 --fed
+                ;;
+            1)
+                $PYTHON -m src.split-learning --mode splitfed_v1_custom_cut --fed
+                ;;
+            2)
+                $PYTHON -m src.split-learning --mode splitfed_v2_custom_cut --fed
+                ;;
+            *)
+                echo "Invalid mode: $3" >&2
+                exit 1
+                ;;
+        esac
 
     #check for client num
     elif [[ "$device" =~ ^[0-9]+$ ]]; then
         client_num=$device
         echo "Starting client-$client_num";
+        echo "$3"
         collect_data "$1" "$2" 
         
-        if [[ "$3" != *','* ]]; then
+        if [[ "$3" == 0 ]]; then
             $PYTHON -m src.split-learning --mode splitfed_v1 --client $client_num
         else
-            IFS=',' read -r -a split_points <<< "$3"
+            IFS=',' read -r -a split_points <<< "$4"
             split_point=${split_points[$client_num - 1]}
             echo "Split point set to $split_point"
-            $PYTHON -m src.split-learning --mode splitfed_v1_custom_cut --client $client_num --extra $split_point
+                        
+            if [[ "$3" == 1 ]]; then
+                $PYTHON -m src.split-learning --mode splitfed_v1_custom_cut --client $client_num --extra $split_point
+            else
+                $PYTHON -m src.split-learning --mode splitfed_v2_custom_cut --client $client_num --extra $split_point
+            fi
         fi
+
     else
         echo "Invalid device configuration. Did you specify the right name on launch?"
         echo "Device name: $device"
@@ -177,7 +204,7 @@ function run_client() {
 #run auto
 # 1 = filepath to file containing run hyperparameters
 # 2 = parameter file
-# 3 = custom_cut_mode
+# 3 = paradigm mode
 function run_auto() {
     currRun=0
 
@@ -190,7 +217,7 @@ function run_auto() {
 
         update_hyperparameters "$1" "${run_params[@]}" "$3"
 
-        run_client "$output_dir" "$currRun" "${run_params[0]}"
+        run_client "$output_dir" "$currRun" "$3" "${run_params[0]}"
         
         ((currRun++))
 
@@ -201,7 +228,7 @@ function run_auto() {
 
 #Automatic()
 # 1 = input config dir
-# 2 = custom_cut_mode
+# 2 = paradigm mode
 function automatic() {
     
     file=$(dialog --title "Pick automation file" --fselect "$HOME/" $HEIGHT $WIDTH 2>&1 >$TERMINAL)
@@ -232,11 +259,11 @@ function automatic() {
 # Manual mode
 #===========================
 # $1 = config
-# $2 = custom_cut_mode
+# $2 = paradigm mode
 
 function manual_input() {
 
-    if [[ $2 == false ]]; then
+    if [[ $2 == 0 ]]; then
         echo "0" | dialog --no-clear --gauge "Getting Config Values" 15 50 0
         cut_layer=$(yq '.cut_layer' "$1")
     else
@@ -281,13 +308,13 @@ function manual_input() {
         patience=$(echo "$CHOICE" | sed -n '5p')
         test_cut_layer=$(echo "$CHOICE" | sed -n '6p')
 
-        update_hyperparameters "$1" "$cut_layer" "$epoch" "$round" "$split_type" "$patience" "$test_cut_layer" $2
+        update_hyperparameters "$1" "$cut_layer" "$epoch" "$round" "$split_type" "$patience" "$test_cut_layer" "$2"
         dialog --infobox "Successfully updated hyperparameters" 10 30
         sleep 2
 
         clear
 
-        run_client "$output_dir" "0" "$cut_layer"
+        run_client "$output_dir" "0" "$2" "$cut_layer"
 
     else
         dialog --infobox "Aborted changes to hyperparameters" 10 30
@@ -299,7 +326,7 @@ function manual_input() {
 
 
 # $1 = config
-# $2 = custom_cut_mode
+# $2 = paradigm mode
 function manual() {
 
     
@@ -340,7 +367,7 @@ function manual() {
             fi
             
             clear
-            run_client "$output_dir" "0" "$cut_layer"
+            run_client "$output_dir" "0" "$2" "$cut_layer"
             ;;
         2) manual_input "$1" $2
             ;;
@@ -357,7 +384,7 @@ function manual() {
 #===========================
 #
 # 1 = config path
-# 2 = custom_cut_mode
+# 2 = paradigm mode
 #
 function modify_config() {
     
@@ -423,7 +450,7 @@ function modify_config() {
     
     clear
 
-    main_menu "$1" $2
+    main_menu "$1" "$2"
 
     #case choice in 
 }
@@ -437,7 +464,7 @@ CHOICE_HEIGHT=4
 
 #main_menu
 # 1 = config path
-# 2 = custom_cut_mode
+# 2 = paradigm selection
 function main_menu() {
 
     BACKTITLE="Split Learning Executor"
@@ -472,10 +499,14 @@ function main_menu() {
     esac
 }
 
+
+
+
 function home() {
     
     OPTIONS=(1 "SplitFedV1"
-            2 "SplitFedV1 with Custom Cut")
+            2 "SplitFedV1 with Custom Cut"
+            3 "SplitFedV2 with Custom Cut")
 
     CHOICE=$(dialog --clear \
                     --backtitle "$BACKTITLE" \
@@ -490,11 +521,15 @@ function home() {
     case $CHOICE in 
         1)
             CONFIG="/$HOME/split-learning/src/split-learning/splitfed_v1/config.yaml"
-            main_menu "$CONFIG" false
+            main_menu "$CONFIG" 0
             ;;
         2)
             CONFIG="/$HOME/split-learning/src/split-learning/splitfed_v1_custom_cut/config.yaml"
-            main_menu "$CONFIG" true
+            main_menu "$CONFIG" 1
+            ;;
+        3)
+            CONFIG="/$HOME/split-learning/src/split-learning/splitfed_v2_custom_cut/config.yaml"
+            main_menu "$CONFIG" 2
             ;;
     esac
 }
