@@ -154,9 +154,9 @@ class Runner:
             socket.send(send_msg)
 
             
-            #get length of test set
-            test_iters = int(socket.recv().decode())
-            socket.send(send_msg)
+            # #get length of test set
+            # test_iters = int(socket.recv().decode())
+            # socket.send(send_msg)
 
             num_epochs = epochs
 

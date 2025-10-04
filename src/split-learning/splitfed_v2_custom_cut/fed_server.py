@@ -55,6 +55,7 @@ class Runner:
         fed_port = self.config['fed_server']['server_start_port']
         rnd = self.config['round']
 
+
         ##################################################################
         #Code to enable ad-hoc testing 
         if(self.config['device'] == 'cpu'):
@@ -63,6 +64,18 @@ class Runner:
             device = torch.device(
                 'cuda') if torch.cuda.is_available() else torch.device('cpu')
 
+
+        output_file = self.config['data_server']['output_file']
+        val_file = output_file.replace(".pkl", "_val.pkl")
+        val_file_tmp = f"tmp_fed_{val_file}"
+
+        urllib.request.urlretrieve(
+            f"{self.config['data_server']['server_address']}/{val_file}",
+            val_file_tmp
+            )
+        
+        with open(val_file_tmp, 'rb') as handle:
+            valset = pickle.load(handle)
 
         output_file = self.config['data_server']['output_file']
         test_file = output_file.replace(".pkl", "_test.pkl")
@@ -77,6 +90,8 @@ class Runner:
         with open(test_file_tmp, 'rb') as handle:
             testset = pickle.load(handle)
 
+
+
         transformer = transforms.Compose([
                 transforms.RandomCrop(32, padding=4),
                 transforms.RandomHorizontalFlip(),
@@ -85,14 +100,24 @@ class Runner:
                                         (0.2023, 0.1994, 0.2010))
             ])
         
+        
+        valset = TransformedDataset(valset, transform=transformer)
         testset = TransformedDataset(testset, transform=transformer)
         
+        valloader = torch.utils.data.DataLoader(valset,
+                                    batch_size=self.config['batch_size'],
+                                    shuffle=False,
+                                    num_workers=0,
+                                    persistent_workers=False
+        )
+
         testloader = torch.utils.data.DataLoader(testset,
                                     batch_size=self.config['batch_size'],
                                     shuffle=False,
                                     num_workers=0,
                                     persistent_workers=False
         )
+
 
         class ResNet18Client(nn.Module):
 
@@ -312,10 +337,14 @@ class Runner:
                 serv_socket.bind(serv_url)
                 print(f"listening on {serv_url}")
 
-                #send dataset length
-                test_iters = len(testloader)
-                send_test_iters = str(test_iters).encode()
-                serv_socket.send(send_test_iters)
+                
+                '''
+                VAL SET - FOR EARLY STOPPING
+                '''
+
+                val_iters = len(valloader)
+                send_val_iters = str(val_iters).encode()
+                serv_socket.send(send_val_iters)
                 serv_socket.recv()
                 
 
@@ -323,7 +352,7 @@ class Runner:
                 test_model = ResNet18Client(config).to(device)
                 test_model.load_state_dict(client_global_weights)
 
-                bar = tqdm(testloader, desc=f"testset: ", unit='', ascii=True,
+                bar = tqdm(valloader, desc=f"valset: ", unit='', ascii=True,
                            bar_format='{desc} {n_fmt}/{total_fmt} {percentage:3.0f}%|{bar}| {postfix}')
 
                 test_model.eval()
@@ -347,6 +376,43 @@ class Runner:
 
                 serv_socket.send(b"term?")
                 terminate = bool(int(serv_socket.recv().decode()))
+
+                                
+                '''
+                TEST SET - TRUE ACCURACY
+                '''
+
+                #send dataset length
+                test_iters = len(testloader)
+                send_test_iters = str(test_iters).encode()
+                serv_socket.send(send_test_iters)
+                serv_socket.recv()
+
+                config = {"cut_layer": int(self.config['test_cut_layer']), "logits": 10}
+                test_model = ResNet18Client(config).to(device)
+                test_model.load_state_dict(client_global_weights)
+
+                bar = tqdm(testloader, desc=f"testset: ", unit='', ascii=True,
+                           bar_format='{desc} {n_fmt}/{total_fmt} {percentage:3.0f}%|{bar}| {postfix}')
+
+
+                with torch.no_grad():
+                    for data in bar:
+                        inputs, labels = data[0].to(device), data[1].to(device)
+
+                        #send labels
+                        bytes_labels = convert.array_to_bytes(labels.cpu())
+                        serv_socket.send(bytes_labels)
+                        serv_socket.recv()
+
+                        #send activations
+                        activations = test_model(inputs)
+                        server_inputs = activations.detach().clone()
+                        bytes_server_inputs = convert.array_to_bytes(server_inputs.cpu())
+
+                        serv_socket.send(bytes_server_inputs)
+                        serv_socket.recv()
+
 
                 test_model.train()
 

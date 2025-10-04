@@ -337,12 +337,12 @@ class Runner:
             names = socket.recv()
             metrics['round']['recv from split'] += len(names)
 
-            #send length of test set
-            test_iters = len(testloader)
-            send_test_iters = str(test_iters).encode()
-            socket.send(send_test_iters)
+            # #send length of test set
+            # test_iters = len(testloader)
+            # send_test_iters = str(test_iters).encode()
+            # socket.send(send_test_iters)
 
-            socket.recv()
+            # socket.recv()
 
             round_init_end = time.perf_counter()
             metrics['round']['init time'] = round_init_end - round_init_start

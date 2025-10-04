@@ -156,8 +156,7 @@ class Runner:
             logger.setLevel(logging.INFO)
             logging.info('Parameters (FED_SERVER_LOG) ---------- [TOTAL_CLIENTS --> {}, STARTING_SERVER_PORT --> {}, ROUNDS --> {}] ---------- '.format(
                 str(client_total), str(fed_port), str(rnd)))
-
-
+            
 
         def average_weights(w, datasize):
             """
@@ -217,12 +216,12 @@ class Runner:
             
             print(f"Size of global model weights (before) in bytes is: {getsizeof(client_global_weights)}")
             logging.info('Size of global model weights (before) in bytes is: %s', getsizeof(client_global_weights))
-            
+
             global_bytes_weights = convert.ordered_dict_to_bytes(client_global_weights)
+            
 
             print(f"Size of global model weights (after) in bytes is: {getsizeof(global_bytes_weights)}")
             logging.info('Size of Size of global model weights (after) in bytes is: %s', getsizeof(global_bytes_weights))
-
 
             socket.send(global_bytes_weights)
             print(f"Weights sent to client {thread_no}")
