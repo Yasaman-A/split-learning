@@ -18,10 +18,10 @@ from .splitfed_v2_custom_cut import server as splitfed_v2_custom_cut_server
 from .splitfed_v2_custom_cut import fed_server as splitfed_v2_custom_cut_fed_server
 
 #from .non_iid import run
-from .data_manager import create_iid_dataset, create_non_iid_dataset
+from .datagen.data_manager import create_iid_dataset, create_non_iid_dataset, create_dirichlet_feature_skew
 
-from .datagen.non_iid import run as non_iid_run
-from .datagen.feature_skew_dirichlet import run as feature_skew_dirichlet_run
+#from .datagen.non_iid import run as non_iid_run
+#from .datagen.feature_skew_dirichlet import run as feature_skew_dirichlet_run
 from .datagen.label_skew_dirichlet import run as label_skew_dirichlet_run
 from .datagen.quantity_skew_dirichlet import run as quantity_skew_dirichlet_run
 from .datagen.quantity_skew_minsize_dirichlet import (
@@ -119,14 +119,27 @@ class Main:
             match args.data_type:
                 case "iid":
                     print(f"Generating IID dataset with {args.num_clients} clients")
-                    create_iid_dataset(args.dataset_name, num_clients=args.num_clients,output_name=args.output_name, seed=args.seed)
+                    create_iid_dataset(args.dataset_name, 
+                                       num_clients=args.num_clients,
+                                       output_name=args.output_name, 
+                                       seed=args.seed)
+
                 case "non_iid":
                     print(f"Generating non-IID data with classes_pc={args.classes_pc}")
-                    non_iid_run(args.classes_pc, args.num_clients, args.batch_size)
+                    create_non_iid_dataset(args.dataset_name, 
+                                       num_clients=args.num_clients, 
+                                       output_name=args.output_name, 
+                                       classes_per_client=args.classes_pc,
+                                       seed=args.seed)
 
                 case "feature_skew_dirichlet":
                     print(f"Generating feature skew data with alpha_feat_split={args.alpha_feat_split}")
-                    feature_skew_dirichlet_run(args.alpha_feat_split, args.num_clients, args.batch_size)
+                    create_dirichlet_feature_skew(args.dataset_name, 
+                                                 num_clients=args.num_clients, 
+                                                 output_name=args.output_name,
+                                                 alpha_feat_split=args.alpha_feat_split,
+                                                 seed=args.seed)
+                    #feature_skew_dirichlet_run(args.alpha_feat_split, args.num_clients, args.batch_size)
 
                 case "label_skew_dirichlet":
                     print(f"Generating label skew data with alpha_label_split={args.alpha_label_split}")

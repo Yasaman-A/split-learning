@@ -8,6 +8,9 @@ from tqdm.auto import tqdm
 from collections import defaultdict, Counter
 from sklearn.model_selection import train_test_split
 
+from .feature_skew_dirichlet import run as feature_skew_dirichlet
+
+
 '''
 Dataset Getters
 =================
@@ -84,6 +87,19 @@ def print_distribution_statistics(dataset, subsets):
 
     return
 
+def save_subsets(output_name, train_subsets, testing_set, val_set):
+
+    print(f"Saving split data as: \'{output_name}.pkl\'")
+    with open(output_name + ".pkl", 'wb') as f:
+        pickle.dump(train_subsets, f, protocol=pickle.HIGHEST_PROTOCOL)
+    print(f"Saving test data as: \'{output_name}_test.pkl\'")
+    with open(output_name + "_test" + ".pkl", 'wb') as f:
+        pickle.dump(testing_set, f, protocol=pickle.HIGHEST_PROTOCOL)
+    print(f"Saving validation data as: \'{output_name}_val.pkl\'")
+    with open(output_name + "_val" + ".pkl", 'wb') as f:
+        pickle.dump(val_set, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+    return
 
 
 
@@ -93,17 +109,13 @@ Distributors
 ===============================
 '''
 
-def shuffle_and_split_iid_data(training_data, testing_data, val_data, num_clients, output_name):
+def shuffle_and_split_iid_data(training_data, num_clients):
     '''
     Splits training_data evenly into num_clients IID subsets and saves them to a pickle file.
-    Saves the unmodified testing_data separately.
 
     Args:
         training_data (Dataset): Dataset object for training
-        testing_data (Dataset): Dataset object for testing
         num_clients (int): Number of clients to split the training data into.
-        output_name (str): Base filename for saving the splits (training saved as output_name.pkl,
-                           testing saved as output_name_test.pkl).
     '''
     def split_to_subsets(dataset, num_clients):
         size = len(dataset)
@@ -128,30 +140,13 @@ def shuffle_and_split_iid_data(training_data, testing_data, val_data, num_client
 
     print_distribution_statistics(training_data, train_subsets)
 
-    preprocessed = []
-    for index, subset in enumerate(train_subsets): #Note: This can be threaded if performance is lacking
-        preprocessed.append(preprocess_subset(subset, index))
-
-    testing_set = preprocess_subset(testing_data, -1)
-    val_set = preprocess_subset(val_data, -2)
-
-    print(f"Saving split data as: \'{output_name}.pkl\'")
-    with open(output_name + ".pkl", 'wb') as f:
-        pickle.dump(preprocessed, f, protocol=pickle.HIGHEST_PROTOCOL)
-    print(f"Saving test data as: \'{output_name}_test.pkl\'")
-    with open(output_name + "_test" + ".pkl", 'wb') as f:
-        pickle.dump(testing_set, f, protocol=pickle.HIGHEST_PROTOCOL)
-        print(f"Saving validation data as: \'{output_name}_val.pkl\'")
-    with open(output_name + "_val" + ".pkl", 'wb') as f:
-        pickle.dump(val_set, f, protocol=pickle.HIGHEST_PROTOCOL)
-
-    return
+    return train_subsets
 
 
 
 
 
-def split_non_iid_data(training_data, testing_data, val_data, num_clients, output_name, classes_per_client=2):
+def split_non_iid_data(training_data, num_clients, classes_per_client=2):
     '''
     Splits the dataset into non-IID subsets by assigning each client a fixed number of classes.
 
@@ -159,10 +154,7 @@ def split_non_iid_data(training_data, testing_data, val_data, num_clients, outpu
     distributed among clients.
 
         training_data (Dataset): Dataset object for training
-        testing_data (Dataset): Dataset object for testing
         num_clients (int): Number of clients to split the training data into.
-        output_name (str): Base filename for saving the splits (training saved as output_name.pkl,
-                           testing saved as output_name_test.pkl).
         classes_per_client (int): Number of classes each client should have data for.
     '''
     
@@ -184,25 +176,8 @@ def split_non_iid_data(training_data, testing_data, val_data, num_clients, outpu
 
     print_distribution_statistics(training_data, train_subsets)
     
-    preprocessed = []
-    for index, subset in enumerate(train_subsets): #Note: This can be threaded if performance is lacking
-        preprocessed.append(preprocess_subset(subset, index))
 
-    testing_set = preprocess_subset(testing_data, -1)
-    val_set = preprocess_subset(val_data, -2)
-
-    print(f"Saving split data as: \'{output_name}.pkl\'")
-    with open(output_name + ".pkl", 'wb') as f:
-        pickle.dump(preprocessed, f, protocol=pickle.HIGHEST_PROTOCOL)
-    print(f"Saving test data as: \'{output_name}_test.pkl\'")
-    with open(output_name + "_test" + ".pkl", 'wb') as f:
-        pickle.dump(testing_set, f, protocol=pickle.HIGHEST_PROTOCOL)
-    print(f"Saving validation data as: \'{output_name}_val.pkl\'")
-    with open(output_name + "_val" + ".pkl", 'wb') as f:
-        pickle.dump(val_set, f, protocol=pickle.HIGHEST_PROTOCOL)
-
-    return
-
+    return train_subsets
 
 
 
@@ -243,19 +218,53 @@ def create_iid_dataset(dataset_name, num_clients=1, output_name="output", val_fr
     train, val = split_train_validation(train, val_fraction, seed)
 
 
-    shuffle_and_split_iid_data(train, test, val, num_clients, output_name)
+    train_subsets = shuffle_and_split_iid_data(train, test, val, num_clients, output_name)
+
+    preprocessed = []
+    for index, subset in enumerate(train_subsets): #Note: This can be threaded if performance is lacking
+        preprocessed.append(preprocess_subset(subset, index))
+
+    testing_set = preprocess_subset(test, -1)
+    val_set = preprocess_subset(val, -2)
+
+    save_subsets(output_name, preprocessed, testing_set, val_set)
     return 
 
 
-def create_non_iid_dataset(dataset_name, num_clients, output_name="output", classes_per_client=2,  val_fraction=0.1, seed=None):
+def create_non_iid_dataset(dataset_name, num_clients=1, output_name="output", classes_per_client=2,  val_fraction=0.1, seed=None):
     if seed is not None:
         set_seed(seed)
 
     train, test = fetch_data(dataset_name)
     train, val = split_train_validation(train, val_fraction, seed)
 
-    split_non_iid_data(train, test, val, num_clients, output_name, classes_per_client)
+    train_subsets = split_non_iid_data(train, test, val, num_clients, output_name, classes_per_client)
+
+    preprocessed = []
+    for index, subset in enumerate(train_subsets): #Note: This can be threaded if performance is lacking
+        preprocessed.append(preprocess_subset(subset, index))
+
+    testing_set = preprocess_subset(test, -1)
+    val_set = preprocess_subset(val, -2)
+
+    save_subsets(output_name, preprocessed, testing_set, val_set)
     return
 
-#create_iid_dataset("cifar10", num_clients=6, seed=42, output_name="six_clients")
-#create_non_iid_dataset("cifar-10", num_clients=6, output_name="non-iid_6_2", classes_per_client=2, seed=42)
+def create_dirichlet_feature_skew(dataset_name, num_clients=1, output_name="output", alpha_feat_split=0.5, val_fraction=0.1, seed=None):
+    if seed is not None:
+        set_seed(seed)
+
+    train, test = fetch_data(dataset_name)
+    train, val = split_train_validation(train, val_fraction, seed)
+
+    train_subsets = feature_skew_dirichlet(train, alpha_feat_split, num_clients, seed)
+
+    testing_set = preprocess_subset(test, -1)
+    val_set = preprocess_subset(val, -2)
+
+    
+    save_subsets(output_name, train_subsets, testing_set, val_set)
+
+    return
+
+
