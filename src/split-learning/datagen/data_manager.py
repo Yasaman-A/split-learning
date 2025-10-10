@@ -87,6 +87,17 @@ def print_distribution_statistics(dataset, subsets):
 
     return
 
+
+def print_label_distribution(datasets):
+    for i, dataset in enumerate(datasets):
+        labels = [label for _, label in dataset]
+        label_counts = Counter(labels)
+        max_label = max(label_counts.keys())
+        counts_list = [label_counts.get(label, 0) for label in range(max_label + 1)]
+        print(f"Client {i}:")
+        print(counts_list)
+
+
 def save_subsets(output_name, train_subsets, testing_set, val_set):
 
     print(f"Saving split data as: \'{output_name}.pkl\'")
@@ -259,10 +270,11 @@ def create_dirichlet_feature_skew(dataset_name, num_clients=1, output_name="outp
 
     train_subsets = feature_skew_dirichlet(train, alpha_feat_split, num_clients, seed)
 
+    print_label_distribution(train_subsets)
+
     testing_set = preprocess_subset(test, -1)
     val_set = preprocess_subset(val, -2)
 
-    
     save_subsets(output_name, train_subsets, testing_set, val_set)
 
     return

@@ -51,7 +51,7 @@ class Main:
             type=str,
             default="non_iid",
             choices=[
-                #"iid",
+                "iid",
                 "non_iid",
                 "feature_skew_dirichlet",
                 "label_skew_dirichlet",
@@ -64,7 +64,7 @@ class Main:
         )
 
         parser.add_argument('--dataset_name',type=str,                         help='For selecting which dataset to use')
-        parser.add_argument('--output_name', type=str,                         help='data output file name')
+        parser.add_argument('--output_name', type=str, default="output"        help='data output file name')
         parser.add_argument('--classes_pc',  type=int, default=2,              help='For non-iid.')
         parser.add_argument('--num_clients', type=int, default=6,              help='Number of clients to split data for')
         parser.add_argument('--seed',        type=int, default=None,           help='Seed for consistent data generation')
