@@ -68,47 +68,64 @@ Clients in this architecture can have differing cut layers. The current implemen
 ## Splitting Data
 Multiple data splitting strategies are implemented based on fedArtML library [[3]](#3). These scripts can create Label, Feature, and Quantity skews for the non-iid data.
 
-To run the scripts from the  `root` folder use the following commands. 
+Each splitting strategy also accepts the following additional parameters:
+`--dataset_name`: Name of the dataset to use for generation (e.g. 'cifar10') **REQUIRED**
+`--output_name`: Name of the output files. Will create {output_name}.pkl, {output_name}_test.pkl, and {output_name}_val.pkl  
+`--seed`: Seed to fix random generation to. Leave unassigned for randomized generation.
+
+In addition, each 
+
+The following are the implemented data splitting strategies:
+- `iid`
+    - num_clients
+- `non-iid`: Data sharding
+    - num_clients
+    - classes_pc
+- `label_skew_dirichlet`
+    - num_clients
+    - alpha_label_split (smaller = more non-IID)
+- `label_skew_percentage`
+    - num_clients
+    - percentage_skew (0.0 to 1.0)
+- `feature_skew_dirichlet`
+    - num_clients
+    - alpha_feat_split (smaller = more non-IID)
+- `feature_skew_gaussian`
+    - num_clients
+    - sigma_noise (larger = more non-IID)
+- `quantity_skew_dirichlet`
+    - num_clients
+    - alpha_quant_split (smaller = more non-IID)
+- `quantity_skew_minsize_dirichlet`
+    - num_clients
+    - alpha_quant_split (smaller = more non-IID)
+
+Below are example commands to run in project `root` to use the various data splitting strategies.
+
+`python -m src.split-learning --generate --dataset_name cifar10 --data_type iid --num_clients 6`
+
+`python -m src.split-learning --generate --dataset_name cifar10 --data_type non-iid --num_clients 6 --classes_pc 2`
+
+`python -m src.split-learning --generate --dataset_name cifar10 --data_type label_skew_dirichlet --alpha_label_split 0.1 --num_clients 3` --works in gen
+
+`python -m src.split-learning --generate --dataset_name cifar10 --data_type label_skew_percentage --percentage_skew 0.5 --num_clients 2` --works in gen
+
+`python -m src.split-learning --generate --dataset_name cifar10 --data_type feature_skew_dirichlet --alpha_feat_split 0.1 --num_clients 3` --works in gen
+
+`python -m src.split-learning --generate --dataset_name cifar10 --data_type feature_skew_gaussian --sigma_noise 1 --num_clients 3` --works in gen
+
+`python -m src.split-learning --generate --dataset_name cifar10 --data_type quantity_skew_dirichlet --alpha_quant_split 0.1 --num_clients 3` --works in gen
+
+`python -m src.split-learning --generate --dataset_name cifar10 --data_type quantity_skew_minsize_dirichlet --alpha_quant_split 0.1 --num_clients 3` --works in gen
 
 
-`python -m src.split-learning --generate --data_type label_skew_dirichlet --alpha_label_split 0.1 --num_clients 3 --batch_size 128`
-
-`python -m src.split-learning --generate --data_type label_skew_percentage --percentage_skew 0.5 --num_clients 2 --batch_size 128`
-
-`python -m src.split-learning --generate --data_type feature_skew_dirichlet --alpha_feat_split 0.1 --num_clients 3 --batch_size 128`
-
-`python -m src.split-learning --generate --data_type feature_skew_gaussian --sigma_noise 1 --num_clients 3 --batch_size 128`
-
-`python -m src.split-learning --generate --data_type quantity_skew_dirichlet --alpha_quant_split 0.1 --num_clients 3 --batch_size 128`
-
-`python -m src.split-learning --generate --data_type quantity_skew_minsize_dirichlet --alpha_quant_split 0.1 --num_clients 3 --batch_size 128`
+The generated pickle files should be placed on the data server directory. Data server can be started using: `python -m http.server port_number`, e.g. `python -m http.server 8000`
 
 
+Example calls with additional parameters are as follows:
 
-If parameters are not passed, then the default values will be used. 
-
-Running any of the data split scripts will result in *output.pickle* file. This pickle file should be placed on the data server directory. Data server can be started using: `python -m http.server port_number`, e.g. `python -m http.server 8000`
-
-## Splitting Data (OLD)
-datamanager.py exists to grab and split datasets among a number of clients. The datamanger saves to .pkl files: the trainset, {output_name}.pkl; and the test set {output_name}_test.pkl. This code can be easily run via the following command  
-`python -m src.split-learning --generate`  
-This code can accept the following parameters:  
-`--iid`: Boolean value whether to split as iid or non-iid  
-`--num_clients`: Number of clients to split the data among. Default value of 6.  
-`--dataset_name`: Name of the dataset to use for generation (e.g. 'cifar10')  
-`--output_name`: Name of the output files. Will create {output_name}.pkl, {output_name}_test.pkl  
-`--seed`: Seed to fix random generation to.  
-`--classes_pc`: For non-iid data generaition. Decides how many labels each data split gets. Default value of 2.  
-
-Example calls are as follows:
-
-`python -m src.split-learning --generate --iid --dataset_name cifar10 --output_name output --num_clients 6 --seed 42`  
-`python -m src.split-learning --generate --non-iid --dataset_name cifar10 --output_name output_non_iid --num_clients 6 --classes_pc 2 --seed 42`
-
-To use the split data, a simple python file server should be spun up in the directory containing the pickle files.  
-`python -m http.server port_number`, e.g. `python -m http.server 8000`
-
-Non-iid data is generated via the sharding method.
+`python -m src.split-learning --generate --dataset_name cifar10 --output_name output --num_clients 6 --seed 42`  
+`python -m src.split-learning --generate --dataset_name cifar10 --data_type quantity_skew_minsize_dirichlet --alpha_quant_split 0.1 --num_clients 3 --output_name minsize_fixed_42 --seed 42`
 
 More datasets may be added to the datamanager by adding a simple getter function to the dictionary of datasets.
 

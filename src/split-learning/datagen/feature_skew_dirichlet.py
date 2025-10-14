@@ -46,21 +46,6 @@ Parameters:
 """
 
 
-#NOTE: only works with cifar-10 due to transpose order. Generalize this later.
-def convert_data_to_numpy(data):
-    
-    x_list = []
-    y_list = []
-    for i, (image, label) in enumerate(data):
-        image_np = np.array()
-    
-    
-    x_train, y_train = train.data.transpose((0,3,1,2)), np.array(train.targets)
-
-    return (x_train, y_train)
-
-
-
 def print_image_data_stats(data_train, labels_train, data_test, labels_test):
     print("\nData: ")
     print(
@@ -254,12 +239,15 @@ def run(data, alpha_feat_split, num_clients, seed):
     images, labels = zip(*data)
 
     list_x_train, list_y_train, distances = create_feature_skew_with_fedartml(
-        images, labels, num_clients, alpha_feat_split, seed
+        images, 
+        labels, 
+        num_clients, 
+        alpha_feat_split=alpha_feat_split, 
+        seed=seed
     )
 
     list_x_train_pil = [[Image.fromarray(img.astype('uint8')) 
                         for img in client_imgs] for client_imgs in list_x_train]
-
 
     # Print feature skew distances after data generation
     if distances and "without_class_completion_feat" in distances:
