@@ -79,6 +79,8 @@ class Runner:
         #cut_layer = self.config['cut_layer']
         epochs = self.config['epoch']
         rnd = self.config['round']
+        muted = self.config["muted"] or False
+        print(f"muted set to: {muted}")
 
         if(device != 'cpu'):
             device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -166,7 +168,7 @@ class Runner:
 
                 for j in range(recv_iterations):
                     step_start_time = time.perf_counter()
-                    print(f"***TH - {thread_no}***  {epoch} {j}")
+                    if not muted: print(f"***TH - {thread_no}***  {epoch} {j}")
 
                     #receive labels
                     recv_labels = socket.recv()
@@ -202,7 +204,8 @@ class Runner:
                     #telemetry
                     step_end_time = time.perf_counter()
                     total_one_step_time = step_end_time - step_start_time
-                    print(f"***TH - {thread_no}***  SERVER_TOTAL_ONE_STEP_TIME = {total_one_step_time:.3f}, loss: {loss.item():.3f}")
+                    if not muted:
+                        print(f"***TH - {thread_no}***  SERVER_TOTAL_ONE_STEP_TIME = {total_one_step_time:.3f}, loss: {loss.item():.3f}")
                     logging.info(f"***TH - {thread_no}***  SERVER_TOTAL_ONE_STEP_TIME = {total_one_step_time:.3f}, loss: {loss.item():.3f}")
 
 

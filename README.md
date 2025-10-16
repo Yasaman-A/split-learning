@@ -106,17 +106,17 @@ Below are example commands to run in project `root` to use the various data spli
 
 `python -m src.split-learning --generate --dataset_name cifar10 --data_type non-iid --num_clients 6 --classes_pc 2`
 
-`python -m src.split-learning --generate --dataset_name cifar10 --data_type label_skew_dirichlet --alpha_label_split 0.1 --num_clients 3` --works in gen
+`python -m src.split-learning --generate --dataset_name cifar10 --data_type label_skew_dirichlet --alpha_label_split 0.1 --num_clients 3`
 
-`python -m src.split-learning --generate --dataset_name cifar10 --data_type label_skew_percentage --percentage_skew 0.5 --num_clients 2` --works in gen
+`python -m src.split-learning --generate --dataset_name cifar10 --data_type label_skew_percentage --percentage_skew 0.5 --num_clients 2`
 
-`python -m src.split-learning --generate --dataset_name cifar10 --data_type feature_skew_dirichlet --alpha_feat_split 0.1 --num_clients 3` --works in gen
+`python -m src.split-learning --generate --dataset_name cifar10 --data_type feature_skew_dirichlet --alpha_feat_split 0.1 --num_clients 3`
 
-`python -m src.split-learning --generate --dataset_name cifar10 --data_type feature_skew_gaussian --sigma_noise 1 --num_clients 3` --works in gen
+`python -m src.split-learning --generate --dataset_name cifar10 --data_type feature_skew_gaussian --sigma_noise 1 --num_clients 3`
 
-`python -m src.split-learning --generate --dataset_name cifar10 --data_type quantity_skew_dirichlet --alpha_quant_split 0.1 --num_clients 3` --works in gen
+`python -m src.split-learning --generate --dataset_name cifar10 --data_type quantity_skew_dirichlet --alpha_quant_split 0.1 --num_clients 3`
 
-`python -m src.split-learning --generate --dataset_name cifar10 --data_type quantity_skew_minsize_dirichlet --alpha_quant_split 0.1 --num_clients 3` --works in gen
+`python -m src.split-learning --generate --dataset_name cifar10 --data_type quantity_skew_minsize_dirichlet --alpha_quant_split 0.1 --num_clients 3`
 
 
 The generated pickle files should be placed on the data server directory. Data server can be started using: `python -m http.server port_number`, e.g. `python -m http.server 8000`
