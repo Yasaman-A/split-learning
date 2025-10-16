@@ -12,6 +12,7 @@ from torchvision.transforms import Compose
 import sys
 import pickle
 import warnings
+from PIL import Image
 
 warnings.filterwarnings("ignore")
 
@@ -43,19 +44,6 @@ Parameters:
 - num_clients: Total number of clients among which images are to be distributed
 - batch_size: Loading of the data into the data loader by batches
 """
-
-
-def get_cifar10():
-    """Return CIFAR10 train/test data and labels as numpy arrays"""
-    data_train = torchvision.datasets.CIFAR10("./data", train=True, download=True)
-    data_test = torchvision.datasets.CIFAR10("./data", train=False, download=True)
-
-    x_train, y_train = data_train.data.transpose((0, 3, 1, 2)), np.array(
-        data_train.targets
-    )
-    x_test, y_test = data_test.data.transpose((0, 3, 1, 2)), np.array(data_test.targets)
-
-    return x_train, y_train, x_test, y_test
 
 
 def print_image_data_stats(data_train, labels_train, data_test, labels_test):
@@ -116,7 +104,12 @@ def from_FedArtML_to_Flower_format(clients_dict):
 
 
 def create_label_skew_with_fedartml(
-    data, labels, n_clients, alpha_label_split=1.0, verbose=True
+    data, 
+    labels, 
+    n_clients, 
+    alpha_label_split=1.0, 
+    verbose=True,
+    seed=None
 ):
     """
     Create label skew using FedArtML library with dirichlet method.
@@ -142,7 +135,7 @@ def create_label_skew_with_fedartml(
     )
 
     # Instantiate SplitAsFederatedData object
-    my_federater = SplitAsFederatedData(random_state=0)
+    my_federater = SplitAsFederatedData(random_state=seed)
 
     # Create federated dataset with label skew using dirichlet method
     clients_glob_dic, list_ids_sampled_dic, miss_class_per_node, distances = (
@@ -166,13 +159,14 @@ def create_label_skew_with_fedartml(
 
     # Print label skew distances
     if verbose:
-        print("\nLabel Skew Distances:")
-        JSD_glob_label = distances["without_class_completion_label"]["jensen-shannon"]
-        print(f"Jensen-Shannon distance: {JSD_glob_label}")
-        HD_glob_label = distances["without_class_completion_label"]["hellinger"]
-        print(f"Hellinger distance: {HD_glob_label}")
-        EMD_glob_label = distances["without_class_completion_label"]["earth-movers"]
-        print(f"Earth Mover's distance: {EMD_glob_label}")
+        if distances and "without_class_completion_label" in distances:
+            print("\nLabel Skew Distances:")
+            JSD_glob_label = distances["without_class_completion_label"]["jensen-shannon"]
+            print(f"Jensen-Shannon distance: {JSD_glob_label}")
+            HD_glob_label = distances["without_class_completion_label"]["hellinger"]
+            print(f"Hellinger distance: {HD_glob_label}")
+            EMD_glob_label = distances["without_class_completion_label"]["earth-movers"]
+            print(f"Earth Mover's distance: {EMD_glob_label}")
 
         # Print feature skew distances (if available)
         if "without_class_completion_feat" in distances:
@@ -255,91 +249,8 @@ def create_fallback_label_skew(data, labels, n_clients, verbose=True):
     return list_x_train, list_y_train
 
 
-def get_default_data_transforms(train=True, verbose=True):
-    """Get default data transformations for CIFAR-10"""
-    transforms_train = {
-        "cifar10": transforms.Compose(
-            [
-                transforms.ToPILImage(),
-                transforms.RandomCrop(32, padding=4),
-                transforms.RandomHorizontalFlip(),
-                transforms.ToTensor(),
-                transforms.Normalize(
-                    (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
-                ),
-            ]
-        )
-    }
-    transforms_eval = {
-        "cifar10": transforms.Compose(
-            [
-                transforms.ToPILImage(),
-                transforms.ToTensor(),
-                transforms.Normalize(
-                    (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
-                ),
-            ]
-        )
-    }
 
-    if verbose:
-        print("\nData preprocessing: ")
-        for transformation in transforms_train["cifar10"].transforms:
-            print(" -", transformation)
-        print()
-
-    return (transforms_train["cifar10"], transforms_eval["cifar10"])
-
-
-def get_data_loaders_label_skew(
-    nclients, batch_size, alpha_label_split=1.0, verbose=True
-):
-    """
-    Create data loaders with label skew using FedArtML.
-    Returns list of client DataLoaders, test DataLoader, and distances.
-    """
-    x_train, y_train, x_test, y_test = get_cifar10()
-
-    if verbose:
-        print_image_data_stats(x_train, y_train, x_test, y_test)
-
-    transforms_train, transforms_eval = get_default_data_transforms(verbose=False)
-
-    # Create label-skewed split using FedArtML
-    list_x_train, list_y_train, distances = create_label_skew_with_fedartml(
-        x_train, y_train, nclients, alpha_label_split, verbose
-    )
-
-    # Create DataLoaders for each client
-    client_loaders = []
-    for x, y in zip(list_x_train, list_y_train):
-        if len(x) > 0:  # Only create loader if client has data
-            dataset = custom_image_dataset.CustomImageDataset(x, y, transforms_train)
-            loader = torch.utils.data.DataLoader(
-                dataset, batch_size=batch_size, shuffle=True
-            )
-            client_loaders.append(loader)
-        else:
-            # Create empty loader
-            empty_dataset = custom_image_dataset.CustomImageDataset(
-                np.empty((0, 3, 32, 32)), np.empty(0), transforms_train
-            )
-            loader = torch.utils.data.DataLoader(
-                empty_dataset, batch_size=batch_size, shuffle=True
-            )
-            client_loaders.append(loader)
-
-    # Create test loader
-    test_loader = torch.utils.data.DataLoader(
-        custom_image_dataset.CustomImageDataset(x_test, y_test, transforms_eval),
-        batch_size=batch_size,
-        shuffle=False,
-    )
-
-    return client_loaders, test_loader, distances
-
-
-def run(alpha_label_split, num_clients, batch_size):
+def run(data, alpha_label_split, num_clients, seed=None):
     """
     Main function to create label-skewed federated data using FedArtML.
     This function follows the same interface as non_iid.py for compatibility.
@@ -352,22 +263,18 @@ def run(alpha_label_split, num_clients, batch_size):
     print(f"Creating label-skewed data for {num_clients} clients using FedArtML...")
     print(f"Alpha for label split: {alpha_label_split}")
 
-    # Create data loaders with label skew using FedArtML
-    train_loader, test_loader, distances = get_data_loaders_label_skew(
-        nclients=num_clients,
-        batch_size=batch_size,
+    images, labels = zip(*data)
+
+    list_x_train, list_y_train, distances = create_label_skew_with_fedartml(
+        images,
+        labels,
+        num_clients,
         alpha_label_split=alpha_label_split,
-        verbose=False,  # Set to False to avoid duplicate printing
+        seed=seed
     )
 
-    # Save to pickle file (same format as non_iid.py)
-    with open("output.pickle", "wb") as handle:
-        pickle.dump(train_loader, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-    # Print statistics
-    for i in range(num_clients):
-        print(f"Client {i} loader length: {len(train_loader[i])}")
-    print(f"Test loader length: {len(test_loader)}")
+    list_x_train_pil = [[Image.fromarray(img.astype('uint8')) 
+                        for img in client_imgs] for client_imgs in list_x_train]
 
     # Print label skew distances after data generation
     if distances and "without_class_completion" in distances:
@@ -391,7 +298,7 @@ def run(alpha_label_split, num_clients, batch_size):
         print("EMD_glob_label: N/A (distances not available)")
         print("=" * 50)
 
-    return train_loader, test_loader
+    return [list(zip(x, y)) for x, y in zip(list_x_train_pil, list_y_train)]
 
 
 # Example usage (commented out for compatibility)

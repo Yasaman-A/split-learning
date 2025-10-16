@@ -18,17 +18,16 @@ from .splitfed_v2_custom_cut import server as splitfed_v2_custom_cut_server
 from .splitfed_v2_custom_cut import fed_server as splitfed_v2_custom_cut_fed_server
 
 #from .non_iid import run
-from .data_manager import create_iid_dataset, create_non_iid_dataset
-
-from .datagen.non_iid import run as non_iid_run
-from .datagen.feature_skew_dirichlet import run as feature_skew_dirichlet_run
-from .datagen.label_skew_dirichlet import run as label_skew_dirichlet_run
-from .datagen.quantity_skew_dirichlet import run as quantity_skew_dirichlet_run
-from .datagen.quantity_skew_minsize_dirichlet import (
-    run as quantity_skew_minsize_dirichlet_run,
+from .datagen.data_manager import (
+    create_iid_dataset, 
+    create_non_iid_dataset, 
+    create_dirichlet_feature_skew,
+    create_gaussian_feature_skew,
+    create_dirichlet_label_skew,
+    create_percentage_label_skew,
+    create_quantity_skew_dirichlet,
+    create_quantity_skew_minsize_dirichlet
 )
-from .datagen.feature_skew_gaussian import run as feature_skew_gaussian_run
-from .datagen.label_skew_percentage import run as label_skew_percentage_run
 import argparse
 
 
@@ -51,7 +50,7 @@ class Main:
             type=str,
             default="non_iid",
             choices=[
-                #"iid",
+                "iid",
                 "non_iid",
                 "feature_skew_dirichlet",
                 "label_skew_dirichlet",
@@ -63,8 +62,8 @@ class Main:
             help="Type of data generation: non_iid, feature_skew_dirichlet, label_skew, quantity_skew_dirichlet, quantity_skew_minsize_dirichlet, or feature_skew_gaussian.",
         )
 
-        parser.add_argument('--dataset_name',type=str,                         help='For selecting which dataset to use')
-        parser.add_argument('--output_name', type=str,                         help='data output file name')
+        parser.add_argument('--dataset_name',type=str, default=None,           help='For selecting which dataset to use')
+        parser.add_argument('--output_name', type=str, default=None,           help='data output file name')
         parser.add_argument('--classes_pc',  type=int, default=2,              help='For non-iid.')
         parser.add_argument('--num_clients', type=int, default=6,              help='Number of clients to split data for')
         parser.add_argument('--seed',        type=int, default=None,           help='Seed for consistent data generation')
@@ -119,34 +118,89 @@ class Main:
             match args.data_type:
                 case "iid":
                     print(f"Generating IID dataset with {args.num_clients} clients")
-                    create_iid_dataset(args.dataset_name, num_clients=args.num_clients,output_name=args.output_name, seed=args.seed)
+                    create_iid_dataset(
+                        args.dataset_name, 
+                        num_clients=args.num_clients,
+                        output_name=args.output_name or "iid", 
+                        seed=args.seed
+                    )
+
                 case "non_iid":
                     print(f"Generating non-IID data with classes_pc={args.classes_pc}")
-                    non_iid_run(args.classes_pc, args.num_clients, args.batch_size)
+                    create_non_iid_dataset(
+                        args.dataset_name, 
+                        num_clients=args.num_clients, 
+                        output_name=args.output_name or "shard", 
+                        classes_per_client=args.classes_pc,
+                        seed=args.seed
+                    )
 
                 case "feature_skew_dirichlet":
                     print(f"Generating feature skew data with alpha_feat_split={args.alpha_feat_split}")
-                    feature_skew_dirichlet_run(args.alpha_feat_split, args.num_clients, args.batch_size)
+                    create_dirichlet_feature_skew(
+                        args.dataset_name, 
+                        num_clients=args.num_clients, 
+                        output_name=args.output_name or "dirichlet_feature",
+                        alpha_feat_split=args.alpha_feat_split,
+                        seed=args.seed
+                    )
 
                 case "label_skew_dirichlet":
                     print(f"Generating label skew data with alpha_label_split={args.alpha_label_split}")
-                    label_skew_dirichlet_run(args.alpha_label_split, args.num_clients, args.batch_size)
+                    create_dirichlet_label_skew(
+                        args.dataset_name,
+                        args.num_clients,
+                        output_name=args.output_name or "dirichlet_label",
+                        alpha_label_split=args.alpha_label_split,
+                        seed=args.seed
+                    )
 
                 case "label_skew_percentage":
                     print(f"Generating label skew data with percentage_skew={args.percentage_skew}")
-                    label_skew_percentage_run(args.percentage_skew, args.num_clients, args.batch_size)
+                    create_percentage_label_skew(
+                        args.dataset_name,
+                        args.num_clients,
+                        output_name=args.output_name or "percentage_label",
+                        percentage_skew=args.percentage_skew,
+                        seed=args.seed
+                    )
 
                 case "quantity_skew_dirichlet":
                     print(f"Generating quantity skew data with alpha_quant_split={args.alpha_quant_split}")
-                    quantity_skew_dirichlet_run(args.alpha_quant_split, args.num_clients, args.batch_size)
+                    create_quantity_skew_dirichlet(
+                        args.dataset_name,
+                        args.num_clients,
+                        output_name=args.output_name or "quantity_skew_dirichlet",
+                        alpha_quant_split=args.alpha_quant_split,
+                        seed=args.seed
+                    )
 
                 case "quantity_skew_minsize_dirichlet":
                     print(f"Generating quantity skew data with minsize-dirichlet method, alpha_quant_split={args.alpha_quant_split}")
-                    quantity_skew_minsize_dirichlet_run(args.alpha_quant_split, args.num_clients, args.batch_size)
+                    create_quantity_skew_minsize_dirichlet(
+                        args.dataset_name,
+                        args.num_clients,
+                        output_name=args.output_name or "quantity_skew_minsize_dirichlet",
+                        alpha_quant_split=args.alpha_quant_split,
+                        seed=args.seed
+                    )
 
                 case "feature_skew_gaussian":
                     print(f"Generating feature skew data with Gaussian noise method, sigma_noise={args.sigma_noise}")
-                    feature_skew_gaussian_run( args.sigma_noise, args.num_clients, args.batch_size)
+                    create_gaussian_feature_skew(
+                        args.dataset_name,
+                        num_clients=args.num_clients,
+                        output_name=args.output_name or "gaussian_feature",
+                        sigma_noise=args.sigma_noise,
+                        #n_bins=args.n_bins,
+                        #feat_sample_rate=args.feat_sample_rate,
+                        seed=args.seed
+                    )
+                    #feature_skew_gaussian_run( args.sigma_noise, args.num_clients, args.batch_size)
+                
+                case _:
+                    print("invalid generator scheme provided.")
+                    
 
             return
 

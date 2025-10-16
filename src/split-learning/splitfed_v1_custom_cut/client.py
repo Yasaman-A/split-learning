@@ -149,7 +149,15 @@ class Runner:
             transforms.Normalize((0.4914, 0.4822, 0.4465),
                                      (0.2023, 0.1994, 0.2010))
         ])
+
+        # transformer_eval = transforms.Compose([
+        #     transforms.ToTensor(),
+        #     transforms.Normalize((0.4914, 0.4822, 0.4465),
+        #                              (0.2023, 0.1994, 0.2010))
+        # ])
         batch_size = self.config['batch_size']
+
+
 
         #Data Splitting
         match self.config['split_type']:
@@ -159,8 +167,8 @@ class Runner:
                 sampler = None
                 shuffle = True
 
-                testset = trainset = torchvision.datasets.CIFAR10(root='./data', train=False,
-                                                    download=True, transform=transformer)
+                # testset = torchvision.datasets.CIFAR10(root='./data', train=False,
+                #                                     download=True, transform=transformer_eval)
 
             case 's': #Use pre-defined split data
                 if os.path.exists(output_file+str(self.client_id)):
@@ -177,22 +185,22 @@ class Runner:
                 sampler = None
                 shuffle = True
 
-                test_file = output_file.replace('.pkl', '_test.pkl')
-                test_file_tmp = f"tmp_{self.client_id}_{test_file}"
+                # test_file = output_file.replace('.pkl', '_test.pkl')
+                # test_file_tmp = f"tmp_{self.client_id}_{test_file}"
 
-                if os.path.exists(test_file_tmp):
-                    os.remove(test_file_tmp)
-                print(f"{self.config['data_server']['server_address']}/{test_file}")
+                # if os.path.exists(test_file_tmp):
+                #     os.remove(test_file_tmp)
+                # print(f"{self.config['data_server']['server_address']}/{test_file}")
 
-                urllib.request.urlretrieve(
-                    f"{self.config['data_server']['server_address']}/{test_file}",
-                    test_file_tmp
-                    )
+                # urllib.request.urlretrieve(
+                #     f"{self.config['data_server']['server_address']}/{test_file}",
+                #     test_file_tmp
+                #     )
 
-                with open(test_file_tmp, 'rb') as handle:
-                    testset = pickle.load(handle)
+                # with open(test_file_tmp, 'rb') as handle:
+                #     testset = pickle.load(handle)
                 
-                testset = TransformedDataset(testset, transformer)
+                # testset = TransformedDataset(testset, transformer_eval)
 
             case '_': #Split into 'split_type' number of blocks.
                 trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
@@ -207,8 +215,8 @@ class Runner:
                 sampler = torch.utils.data.SubsetRandomSampler(use_indices)
                 shuffle=False
 
-                testset = torchvision.datasets.CIFAR10(root='./data', train=False,
-                                    download=True, transform=transformer)
+                # testset = torchvision.datasets.CIFAR10(root='./data', train=False,
+                #                     download=True, transform=transformer_eval)
 
 
         trainloader = torch.utils.data.DataLoader(trainset, 
@@ -216,14 +224,16 @@ class Runner:
                                         shuffle=shuffle,
                                         sampler = sampler,
                                         num_workers=2,
+                                        drop_last=True,
                                         persistent_workers=True)
         
-        testloader = torch.utils.data.DataLoader(testset,
-                                            batch_size=batch_size,
-                                            shuffle=False,
-                                            num_workers=0,
-                                            persistent_workers=False
-        )
+        # testloader = torch.utils.data.DataLoader(testset,
+        #                                     batch_size=batch_size,
+        #                                     shuffle=False,
+        #                                     num_workers=0,
+        #                                     drop_last=True,
+        #                                     persistent_workers=False
+        # )
         datasetsize_used = len(trainloader.dataset)
 
 

@@ -5,22 +5,22 @@ log_steps: 50
 
 #cpu OR gpu
 device: gpu
-client_total: 3
-epoch: 2
+client_total: 5
+epoch: 5
 round: 15
 batch_size: 32
 
-patience: 1
-test_cut_layer: 9
+patience: 5
+test_cut_layer: 4
 
 # n for no_split, s: for getting split i from data server, Any number for the number of i.i.d splits.
 split_type: s
 split_server: 
-  server_ip: tcp://split
+  server_ip: tcp://localhost
   server_start_port: 5555
 fed_server:
-  server_ip: tcp://fed
+  server_ip: tcp://localhost
   server_start_port: 4445
 data_server:
-  server_address: http://host.docker.internal:8000
-  output_file: output.pkl
+  server_address: http://localhost:8000/
+  output_file: dirchlet.pkl
