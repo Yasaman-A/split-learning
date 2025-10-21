@@ -79,7 +79,7 @@ class Runner:
         #cut_layer = self.config['cut_layer']
         epochs = self.config['epoch']
         rnd = self.config['round']
-        muted = self.config["muted"] or False
+        muted = bool(self.config.get("muted", False))
         print(f"muted set to: {muted}")
 
         if(device != 'cpu'):
