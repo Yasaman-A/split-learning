@@ -1,4 +1,7 @@
 logging: true
+#mute server step updates in terminal (useful if using docker)
+muted: true
+
 log_dir: "./logs"
 model_dir: "./models"
 log_steps: 50
@@ -7,10 +10,11 @@ log_steps: 50
 device: gpu
 client_total: 5
 epoch: 5
-round: 15
+round: 3
 batch_size: 32
 
-patience: 5
+patience: 0
+cut_layer: 4
 test_cut_layer: 4
 
 # n for no_split, s: for getting split i from data server, Any number for the number of i.i.d splits.
@@ -23,4 +27,4 @@ fed_server:
   server_start_port: 4445
 data_server:
   server_address: http://localhost:8000/
-  output_file: dirchlet.pkl
+  output_file: quantity_skew_minsize_dirichlet.pkl

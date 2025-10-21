@@ -270,7 +270,6 @@ class Runner:
 
         num_rounds = rnd
 
-        #Networking Telemetry
 
 
         initial_loading_end_time = time.perf_counter()
