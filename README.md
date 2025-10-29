@@ -126,8 +126,16 @@ Example calls with additional parameters are as follows:
 
 `python -m src.split-learning --generate --dataset_name cifar10 --output_name output --num_clients 6 --seed 42`  
 `python -m src.split-learning --generate --dataset_name cifar10 --data_type quantity_skew_minsize_dirichlet --alpha_quant_split 0.1 --num_clients 3 --output_name minsize_fixed_42 --seed 42`
+`python -m src.split-learning --generate --dataset_name cifar10 --data_type quantity_skew_minsize_dirichlet --alpha_quant_split 0.0005 --num_clients 5 --seed 42 --viz`  
 
 More datasets may be added to the datamanager by adding a simple getter function to the dictionary of datasets.
+
+### Data Visualization
+The generated data can be visualzied by passing --viz input to the data generator commands.
+
+The data visualization script can be calleded directly by passing an already generated data file passed by --pickle_file, and can do the visualization only for selected clients passed by --clinets input
+
+`python src/split-learning/datagen/viz.py --pickle_file ld_0.01.pkl --detailed --clients "0,1,2"`
 
 ## Common Files
 - **Convert**: This is a utility file that contains some conversion utility methods.

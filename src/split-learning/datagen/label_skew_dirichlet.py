@@ -104,12 +104,7 @@ def from_FedArtML_to_Flower_format(clients_dict):
 
 
 def create_label_skew_with_fedartml(
-    data, 
-    labels, 
-    n_clients, 
-    alpha_label_split=1.0, 
-    verbose=True,
-    seed=None
+    data, labels, n_clients, alpha_label_split=1.0, verbose=True, seed=None
 ):
     """
     Create label skew using FedArtML library with dirichlet method.
@@ -152,7 +147,8 @@ def create_label_skew_with_fedartml(
     # Use without class completion
     clients_glob = clients_glob_dic["without_class_completion"]
 
-    # Convert to our format
+    # Con
+    # ert to our format
     list_x_train, list_y_train = from_FedArtML_to_Flower_format(
         clients_dict=clients_glob
     )
@@ -161,7 +157,9 @@ def create_label_skew_with_fedartml(
     if verbose:
         if distances and "without_class_completion_label" in distances:
             print("\nLabel Skew Distances:")
-            JSD_glob_label = distances["without_class_completion_label"]["jensen-shannon"]
+            JSD_glob_label = distances["without_class_completion_label"][
+                "jensen-shannon"
+            ]
             print(f"Jensen-Shannon distance: {JSD_glob_label}")
             HD_glob_label = distances["without_class_completion_label"]["hellinger"]
             print(f"Hellinger distance: {HD_glob_label}")
@@ -249,7 +247,6 @@ def create_fallback_label_skew(data, labels, n_clients, verbose=True):
     return list_x_train, list_y_train
 
 
-
 def run(data, alpha_label_split, num_clients, seed=None):
     """
     Main function to create label-skewed federated data using FedArtML.
@@ -266,15 +263,13 @@ def run(data, alpha_label_split, num_clients, seed=None):
     images, labels = zip(*data)
 
     list_x_train, list_y_train, distances = create_label_skew_with_fedartml(
-        images,
-        labels,
-        num_clients,
-        alpha_label_split=alpha_label_split,
-        seed=seed
+        images, labels, num_clients, alpha_label_split=alpha_label_split, seed=seed
     )
 
-    list_x_train_pil = [[Image.fromarray(img.astype('uint8')) 
-                        for img in client_imgs] for client_imgs in list_x_train]
+    list_x_train_pil = [
+        [Image.fromarray(img.astype("uint8")) for img in client_imgs]
+        for client_imgs in list_x_train
+    ]
 
     # Print label skew distances after data generation
     if distances and "without_class_completion" in distances:
