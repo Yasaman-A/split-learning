@@ -32,35 +32,7 @@ import logging
 import os
 # from objsize import get_deep_size
 
-
-class ResNet18Server(nn.Module):
-    """docstring for ResNet"""
-
-    def __init__(self, config):
-        super(ResNet18Server, self).__init__()
-        self.logits = config['logits']
-        self.cut_layer = config['cut_layer']
-
-        self.model = models.resnet18(weights=None)
-        self.model.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False) #MNIST change
-        
-        num_ftrs = self.model.fc.in_features
-        self.model.fc = nn.Sequential(nn.Flatten(),
-                                        nn.Linear(num_ftrs, self.logits))
-        
-        self.layers = list(self.model.children())
-
-
-    def forward(self, x):
-        for i, l in enumerate(self.layers):
-            if i <= self.cut_layer:
-                continue
-            x = l(x)
-        return x
-    
-    def classify(self, x):
-        return nn.functional.softmax(self.forward(x))
-
+from ..architectures.model_manager import get_architecture_bundle
 
 class Runner:
     def __init__(self, config_path) -> None:
@@ -82,6 +54,13 @@ class Runner:
         rnd = self.config['round']
         muted = bool(self.config.get("muted", False))
         print(f"muted set to: {muted}")
+
+        logits = self.config["logits"]
+        test_config = {"cut_layer": self.config['test_cut_layer'], "logits": logits}
+
+        model_architecture = self.config['model_architecture']
+        arch = get_architecture_bundle(model_architecture)
+
 
         if(device != 'cpu'):
             device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -115,11 +94,12 @@ class Runner:
             global server_global_weights
             global server_weights
             global datasetsize_server
+            
 
+            model_config = {"cut_layer": cut_layer, "logits": logits}
             socket = context.socket(zmq.REP)
-
             socket.bind(url)
-
+            
             socket.recv()
             if self.terminate: 
                 socket.send(b"1")
@@ -127,9 +107,7 @@ class Runner:
                 return
             else: socket.send(b"0")
 
-
-            config = {"cut_layer": cut_layer, "logits": 10}
-            server_model = ResNet18Server(config).to(device)
+            server_model = arch.server(model_config).to(device)
 
             criterion = nn.CrossEntropyLoss()
             server_optimizer = optim.SGD(
@@ -343,7 +321,7 @@ class Runner:
 
                 # Server models weighted averaging..
                         #server_global_exposure removed - unneeded.
-                server_global_weights, _ = custom_model_avg(True, server_weights, datasetsize_server, self.server_cut_layer_list)
+                server_global_weights, _ = custom_model_avg(True, server_weights, datasetsize_server, self.server_cut_layer_list, arch.base, test_config)
 
                 model_save_name = os.path.join(
                     self.config.get("model_dir", "./"),
@@ -371,15 +349,14 @@ class Runner:
                 fed_iters = int(fed_socket.recv().decode())
                 fed_socket.send(b"a")
                 
-                config = {"cut_layer": self.config['test_cut_layer'], "logits": 10}
-                fed_model = ResNet18Server(config).to(device)
+                fed_model = arch.server(test_config).to(device)
                 fed_model.load_state_dict(server_global_weights)
 
                 correct = 0
                 total = 0
-                correct_per_class = torch.zeros(config['logits'], dtype=torch.long)
-                total_per_class   = torch.zeros(config['logits'], dtype=torch.long)
-                confusion_matrix = torch.zeros(config['logits'], config['logits'], dtype=torch.int64)
+                correct_per_class = torch.zeros(test_config['logits'], dtype=torch.long)
+                total_per_class   = torch.zeros(test_config['logits'], dtype=torch.long)
+                confusion_matrix = torch.zeros(test_config['logits'], test_config['logits'], dtype=torch.int64)
 
                 eval_time_start = time.perf_counter()
                 fed_model.eval()
@@ -411,7 +388,7 @@ class Runner:
                         correct += (predicted == labels).sum().item()
                         total += labels.size(0)
 
-                        for class_idx in range(config['logits']):
+                        for class_idx in range(test_config['logits']):
                             mask = (labels == class_idx)
                             total_per_class[class_idx] += mask.sum().item()
                             correct_per_class[class_idx] += (predicted[mask] == class_idx).sum().item()
@@ -434,8 +411,8 @@ class Runner:
 
                 print("Confusion Matrix -- Val (rows=true, cols=pred):")
                 logging.info("Confusion Matrix -- Val (rows=true, cols=pred):")
-                for i in range(config['logits']):
-                    row = " ".join(f"{confusion_matrix[i, j].item():4d}" for j in range(config['logits']))
+                for i in range(test_config['logits']):
+                    row = " ".join(f"{confusion_matrix[i, j].item():4d}" for j in range(test_config['logits']))
                     print(row)
                     logging.info(row)
 
@@ -466,15 +443,14 @@ class Runner:
                 fed_iters = int(fed_socket.recv().decode())
                 fed_socket.send(b"a")
                 
-                config = {"cut_layer": self.config['test_cut_layer'], "logits": 10}
-                fed_model = ResNet18Server(config).to(device)
+                fed_model = arch.server(test_config).to(device)
                 fed_model.load_state_dict(server_global_weights)
 
                 correct = 0
                 total = 0
-                correct_per_class = torch.zeros(config['logits'], dtype=torch.long)
-                total_per_class   = torch.zeros(config['logits'], dtype=torch.long)
-                confusion_matrix = torch.zeros(config['logits'], config['logits'], dtype=torch.int64)
+                correct_per_class = torch.zeros(test_config['logits'], dtype=torch.long)
+                total_per_class   = torch.zeros(test_config['logits'], dtype=torch.long)
+                confusion_matrix = torch.zeros(test_config['logits'], test_config['logits'], dtype=torch.int64)
 
                 eval_time_start = time.perf_counter()
                 fed_model.eval()
@@ -506,7 +482,7 @@ class Runner:
                         correct += (predicted == labels).sum().item()
                         total += labels.size(0)
 
-                        for class_idx in range(config['logits']):
+                        for class_idx in range(test_config['logits']):
                             mask = (labels == class_idx)
                             total_per_class[class_idx] += mask.sum().item()
                             correct_per_class[class_idx] += (predicted[mask] == class_idx).sum().item()
@@ -529,8 +505,8 @@ class Runner:
 
                 print("Confusion Matrix -- Test (rows=true, cols=pred):")
                 logging.info("Confusion Matrix -- Test (rows=true, cols=pred):")
-                for i in range(config['logits']):
-                    row = " ".join(f"{confusion_matrix[i, j].item():4d}" for j in range(config['logits']))
+                for i in range(test_config['logits']):
+                    row = " ".join(f"{confusion_matrix[i, j].item():4d}" for j in range(test_config['logits']))
                     print(row)
                     logging.info(row)
 
@@ -540,15 +516,14 @@ class Runner:
                     print(fed_iters)
                     fed_socket.send(b"a")
                     
-                    config = {"cut_layer": self.config['test_cut_layer'], "logits": 10}
-                    fed_model = ResNet18Server(config).to(device)
+                    fed_model = arch.server(test_config).to(device)
                     fed_model.load_state_dict(server_global_weights)
 
                     correct = 0
                     total = 0
-                    correct_per_class = torch.zeros(config['logits'], dtype=torch.long)
-                    total_per_class   = torch.zeros(config['logits'], dtype=torch.long)
-                    confusion_matrix = torch.zeros(config['logits'], config['logits'], dtype=torch.int64)
+                    correct_per_class = torch.zeros(test_config['logits'], dtype=torch.long)
+                    total_per_class   = torch.zeros(test_config['logits'], dtype=torch.long)
+                    confusion_matrix = torch.zeros(test_config['logits'], test_config['logits'], dtype=torch.int64)
 
                     eval_time_start = time.perf_counter()
                     fed_model.eval()
@@ -580,7 +555,7 @@ class Runner:
                             correct += (predicted == labels).sum().item()
                             total += labels.size(0)
 
-                            for class_idx in range(config['logits']):
+                            for class_idx in range(test_config['logits']):
                                 mask = (labels == class_idx)
                                 total_per_class[class_idx] += mask.sum().item()
                                 correct_per_class[class_idx] += (predicted[mask] == class_idx).sum().item()

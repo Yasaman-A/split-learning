@@ -20,10 +20,11 @@ import os
 import urllib.request
 import pickle
 from torchvision import transforms, models
-import torchvision.transforms as transforms
+
 import torch.nn as nn
 from tqdm.auto import tqdm
 
+from ..architectures.model_manager import get_architecture_bundle
 
 class TransformedDataset(torch.utils.data.Dataset):
     def __init__(self, data, transform=None):
@@ -51,6 +52,12 @@ class Runner:
         client_total = self.config['client_total']
         fed_port = self.config['fed_server']['server_start_port']
         rnd = self.config['round']
+
+        logits = self.config["logits"]
+        test_config = {"cut_layer": self.config['test_cut_layer'], "logits": logits}
+
+        model_architecture = self.config['model_architecture']
+        arch = get_architecture_bundle(model_architecture)
 
 
         ##################################################################
@@ -92,18 +99,8 @@ class Runner:
         with open(output_file, 'rb') as handle:
             datasets = pickle.load(handle)
 
-
-
-        # transformer = transforms.Compose([
-        #         transforms.ToTensor(),
-        #         transforms.Normalize((0.4914, 0.4822, 0.4465),
-        #                                 (0.2023, 0.1994, 0.2010))
-        #     ])
         
-        transformer = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.1307,), (0.3081,))
-        ])
+        transformer = arch.eval_transformer
 
         
         valset = TransformedDataset(valset, transform=transformer)
@@ -133,30 +130,6 @@ class Runner:
                                     persistent_workers=False
         ))
         
-
-        class ResNet18Client(nn.Module):
-
-            def __init__(self, config):
-                super(ResNet18Client, self).__init__()
-                self.logits = config['logits']
-                self.cut_layer = cut_layer
-
-                self.model = models.resnet18(weights=None)
-                self.model.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False) #MNIST change
-
-
-                num_ftrs = self.model.fc.in_features
-                self.model.fc = nn.Sequential(nn.Flatten(),
-                                                  nn.Linear(num_ftrs, self.logits))
-                
-                self.layers = list(self.model.children())
-
-            def forward(self, x):
-                for i, l in enumerate(self.layers):
-                    if i > self.cut_layer:
-                        break
-                    x = l(x)
-                return x
 
         ##################################################################
 
@@ -315,7 +288,7 @@ class Runner:
                 print("Length of dataset: ", len(datasetsize_client))
                 print("Length of cut_layers: ", len(client_cut_layer_list))
 
-                client_global_weights, client_exposure = custom_model_avg(False, client_weights, datasetsize_client, client_cut_layer_list)
+                client_global_weights, client_exposure = custom_model_avg(False, client_weights, datasetsize_client, client_cut_layer_list, arch.base, test_config)
 
                 print("Global clients calculated..")
                 logging.info("Global clients calculated..")
@@ -359,7 +332,7 @@ class Runner:
                 
 
                 config = {"cut_layer": int(self.config['test_cut_layer']), "logits": 10}
-                test_model = ResNet18Client(config).to(device)
+                test_model = arch.client(test_config).to(device)
                 test_model.load_state_dict(client_global_weights)
 
                 bar = tqdm(valloader, desc=f"valset: ", unit='', ascii=True,
@@ -399,7 +372,7 @@ class Runner:
                 serv_socket.recv()
 
                 config = {"cut_layer": int(self.config['test_cut_layer']), "logits": 10}
-                test_model = ResNet18Client(config).to(device)
+                test_model = arch.client(test_config).to(device)
                 test_model.load_state_dict(client_global_weights)
 
                 bar = tqdm(testloader, desc=f"testset: ", unit='', ascii=True,
@@ -486,7 +459,7 @@ class Runner:
             # serv_exposure = convert.bytes_to_dict(bytes_exposure)
             # print("got exposure")
 
-            # final_model_weights = combine_fed_avg_models(client_global_weights, client_exposure, serv_weights, serv_exposure)
+            # final_model_weights = combine_fed_avg_models(client_global_weights, client_exposure, serv_weights, serv_exposure, arch.base_model)
             # model_save_name = f"./final_aggregate_model.pt"
             # model_save_name = os.path.join(self.config.get("model_dir", "./"), "final_aggregate_model.pt")
             # torch.save(final_model_weights, model_save_name)

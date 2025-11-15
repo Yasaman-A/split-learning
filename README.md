@@ -65,15 +65,35 @@ Clients in this architecture can have differing cut layers. The current implemen
 - `python -m src.split-learning --mode splitfed_v2_custom_cut --client 1 --extra 2`
 
 
+## Model Architecture
+within `src/split-learning/` there is a directory called `architectures`. This is where the various model architectures can be implemented.
+
+Any model architecture in this directory will automatically import itself and be callable during runtime. The model architecture to be used for a specific trial is specified in the appropriate `config.yaml` file.
+
+Each model archictecture file should contain the following:
+
+1) base model
+A version of the architecture with no splitting involved.
+2) client model
+A version of the architecture where the `forward()` function is set up for the client pass
+3) server model
+A version of the architecture where the `forward()` function is set up for the server pass
+4) training transformer
+This is the transformer to be used by clients during training. This transformer can contain augments
+5) eval transformer
+This is the transformer to be used for any eval during runtime. This should NOT contain any augments.
+
+For an example, please see `src/split-learning/architectures/models/resnet18_cifar10.py`
+
+Note: Architectures are registered and called in a case insensitive manner.
+
 ## Splitting Data
 Multiple data splitting strategies are implemented based on fedArtML library [[3]](#3). These scripts can create Label, Feature, and Quantity skews for the non-iid data.
 
 Each splitting strategy also accepts the following additional parameters:
 `--dataset_name`: Name of the dataset to use for generation (e.g. 'cifar10') **REQUIRED**
-`--output_name`: Name of the output files. Will create {output_name}.pkl, {output_name}_test.pkl, and {output_name}_val.pkl  
+`--output_name`: Name of the output files. Will create `{output_name}_{alpha_param}_{dataset_name}.pkl`, `{output_name}_{alpha_param}_{dataset_name}_test.pkl`, and `{output_name}_{alpha_param}_{dataset_name}_val.pkl`  
 `--seed`: Seed to fix random generation to. Leave unassigned for randomized generation.
-
-In addition, each 
 
 The following are the implemented data splitting strategies:
 - `iid`

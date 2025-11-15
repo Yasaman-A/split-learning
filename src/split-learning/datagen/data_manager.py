@@ -139,16 +139,16 @@ def print_label_distribution(datasets):
     return
 
 
-def save_subsets(output_name, train_subsets, testing_set, val_set):
+def save_subsets(output_name, dataset_name, train_subsets, testing_set, val_set):
 
-    print(f"Saving split data as: \'{output_name}.pkl\'")
-    with open(output_name + ".pkl", 'wb') as f:
+    print(f"Saving split data as: \'{output_name}_{dataset_name}.pkl\'")
+    with open(f"{output_name}_{dataset_name}.pkl", 'wb') as f:
         pickle.dump(train_subsets, f, protocol=pickle.HIGHEST_PROTOCOL)
-    print(f"Saving test data as: \'{output_name}_test.pkl\'")
-    with open(output_name + "_test" + ".pkl", 'wb') as f:
+    print(f"Saving test data as: \'{output_name}_{dataset_name}_test.pkl\'")
+    with open(f"{output_name}_{dataset_name}_test.pkl", 'wb') as f:
         pickle.dump(testing_set, f, protocol=pickle.HIGHEST_PROTOCOL)
-    print(f"Saving validation data as: \'{output_name}_val.pkl\'")
-    with open(output_name + "_val" + ".pkl", 'wb') as f:
+    print(f"Saving validation data as: \'{output_name}_{dataset_name}_val.pkl\'")
+    with open(f"{output_name}_{dataset_name}_val.pkl", 'wb') as f:
         pickle.dump(val_set, f, protocol=pickle.HIGHEST_PROTOCOL)
 
     return
@@ -259,7 +259,7 @@ def create_iid_dataset(dataset_name, num_clients=1, output_name="iid", val_fract
     testing_set = preprocess_subset(test, -1)
     val_set = preprocess_subset(val, -2)
 
-    save_subsets(output_name, preprocessed, testing_set, val_set)
+    save_subsets(output_name, dataset_name, preprocessed, testing_set, val_set)
     return 
 
 
@@ -280,7 +280,7 @@ def create_non_iid_dataset(dataset_name, num_clients=1, output_name="shard", cla
     testing_set = preprocess_subset(test, -1)
     val_set = preprocess_subset(val, -2)
 
-    save_subsets(output_name, preprocessed, testing_set, val_set)
+    save_subsets(output_name, dataset_name, preprocessed, testing_set, val_set)
     return
 
 
@@ -312,7 +312,7 @@ def create_dirichlet_feature_skew(
     testing_set = preprocess_subset(test, -1)
     val_set = preprocess_subset(val, -2)
 
-    save_subsets(output_name, train_subsets, testing_set, val_set)
+    save_subsets(output_name, dataset_name, train_subsets, testing_set, val_set)
 
     return
 
@@ -349,7 +349,7 @@ def create_gaussian_feature_skew(
     testing_set = preprocess_subset(test, -1)
     val_set = preprocess_subset(val, -2)
 
-    save_subsets(output_name, train_subsets, testing_set, val_set)
+    save_subsets(output_name, dataset_name, train_subsets, testing_set, val_set)
     
     return
 
@@ -382,7 +382,7 @@ def create_dirichlet_label_skew(
     testing_set = preprocess_subset(test, -1)
     val_set = preprocess_subset(val, -2)
 
-    save_subsets(output_name, train_subsets, testing_set, val_set)
+    save_subsets(output_name, dataset_name, train_subsets, testing_set, val_set)
 
     return
 
@@ -413,7 +413,7 @@ def create_percentage_label_skew(
     testing_set = preprocess_subset(test, -1)
     val_set = preprocess_subset(val, -2)
 
-    save_subsets(output_name, train_subsets, testing_set, val_set)
+    save_subsets(output_name, dataset_name, train_subsets, testing_set, val_set)
 
     return
 
@@ -446,7 +446,7 @@ def create_quantity_skew_dirichlet(
     testing_set = preprocess_subset(test, -1)
     val_set = preprocess_subset(val, -2)
 
-    save_subsets(output_name, train_subsets, testing_set, val_set)
+    save_subsets(output_name, dataset_name, train_subsets, testing_set, val_set)
     
     return
 
@@ -479,6 +479,6 @@ def create_quantity_skew_minsize_dirichlet(
     testing_set = preprocess_subset(test, -1)
     val_set = preprocess_subset(val, -2)
 
-    save_subsets(output_name, train_subsets, testing_set, val_set)
+    save_subsets(output_name, dataset_name, train_subsets, testing_set, val_set)
     
     return

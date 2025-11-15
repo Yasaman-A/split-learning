@@ -3,21 +3,21 @@ from torchvision import models
 import copy
 import operator
 
-class ResNet18(nn.Module):
-    """docstring for ResNet"""
+# class ResNet18(nn.Module):
+#     """docstring for ResNet"""
 
-    def __init__(self):
-        super(ResNet18, self).__init__()
+#     def __init__(self):
+#         super(ResNet18, self).__init__()
 
-        self.model = models.resnet18(weights=None)
-        self.model.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False) #MNIST change
+#         self.model = models.resnet18(weights=None)
+#         self.model.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False) #MNIST change
 
-        self.logits = 10
-        num_ftrs = self.model.fc.in_features
-        self.model.fc = nn.Sequential(nn.Flatten(),
-                                                  nn.Linear(num_ftrs, self.logits))
+#         self.logits = 10
+#         num_ftrs = self.model.fc.in_features
+#         self.model.fc = nn.Sequential(nn.Flatten(),
+#                                                   nn.Linear(num_ftrs, self.logits))
 
-        self.layers = list(self.model.children())
+#         self.layers = list(self.model.children())
 
 
 def average_models(server: bool, model_list, datasizes, cut_layer_list):
@@ -79,7 +79,7 @@ def average_models(server: bool, model_list, datasizes, cut_layer_list):
 
 
 
-def custom_model_avg(server: bool, state_dicts, data_size, cut_layer_list):
+def custom_model_avg(server: bool, state_dicts, data_size, cut_layer_list, base_model, base_config):
     """
     Creates a custom average model given a list of state dicts, data sizes, and cut layers.
     Chooses between averaging a server or client model based on the input "server" flag.
@@ -103,7 +103,7 @@ def custom_model_avg(server: bool, state_dicts, data_size, cut_layer_list):
     trained_models = []
 
     for state_dict in state_dicts:
-        defn = ResNet18()
+        defn = base_model(base_config)
         defn.load_state_dict(state_dict)
         trained_models.append(defn)
 
@@ -114,12 +114,10 @@ def custom_model_avg(server: bool, state_dicts, data_size, cut_layer_list):
 
 
 
-def combine_fed_avg_models(client_fedavg, client_exposure, server_fedavg, server_exposure):
+def combine_fed_avg_models(client_fedavg, client_exposure, server_fedavg, server_exposure, base_model, base_config):
     '''
     Merges the federated client model and federated server model into one combined
     fedearted model.
-
-    Currently hardcoded to use symmetrical ResNet18.
 
     Args:
         client_fedavg (nn.Module): State dict from the federated client model
@@ -128,7 +126,7 @@ def combine_fed_avg_models(client_fedavg, client_exposure, server_fedavg, server
         server_exposure (dict): dict containing the magnitude of data key in the state dict was exposed to
     
     '''
-    combined = ResNet18()
+    combined = base_model(base_config)
     state_dict = combined.state_dict()
 
 

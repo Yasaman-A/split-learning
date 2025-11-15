@@ -23,6 +23,9 @@ import yaml
 import logging
 from tqdm.auto import tqdm
 
+from ..architectures.model_manager import get_architecture_bundle
+
+
 
 class TransformedDataset(torch.utils.data.Dataset):
     def __init__(self, data, transform=None):
@@ -63,6 +66,10 @@ class Runner:
         num_epochs = int(self.config['epoch'])
         output_file = self.config['data_server']['output_file']
         rnd = self.config['round']
+
+        model_architecture = self.config['model_architecture']
+
+        arch = get_architecture_bundle(model_architecture)
 
 
         metrics = {
@@ -139,30 +146,9 @@ class Runner:
                 'cuda') if torch.cuda.is_available() else torch.device('cpu')
         print(device)
 
-         #Data Preparation
+        transformer = arch.training_transformer
 
-        # #transforms for CIFAR-10
-        # transformer = transforms.Compose([
-        #     transforms.RandomCrop(32, padding=4),
-        #     transforms.RandomHorizontalFlip(),
-        #     transforms.ToTensor(),
-        #     transforms.Normalize((0.4914, 0.4822, 0.4465),
-        #                              (0.2023, 0.1994, 0.2010))
-        # ])
-
-        transformer = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.1307,), (0.3081,))
-        ])
-
-        # transformer_eval = transforms.Compose([
-        #     transforms.ToTensor(),
-        #     transforms.Normalize((0.4914, 0.4822, 0.4465),
-        #                              (0.2023, 0.1994, 0.2010))
-        # ])
         batch_size = self.config['batch_size']
-
-
 
         #Data Splitting
         match self.config['split_type']:
@@ -232,44 +218,10 @@ class Runner:
                                         drop_last=True,
                                         persistent_workers=True)
         
-        # testloader = torch.utils.data.DataLoader(testset,
-        #                                     batch_size=batch_size,
-        #                                     shuffle=False,
-        #                                     num_workers=0,
-        #                                     drop_last=True,
-        #                                     persistent_workers=False
-        # )
         datasetsize_used = len(trainloader.dataset)
 
-
-
-        class ResNet18Client(nn.Module):
-            """docstring for ResNet"""
-
-            def __init__(self, config):
-                super(ResNet18Client, self).__init__()
-                self.logits = config['logits']
-                self.cut_layer = cut_layer
-
-                self.model = models.resnet18(weights=None)
-                self.model.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False) #MNIST change
-
-
-                num_ftrs = self.model.fc.in_features
-                self.model.fc = nn.Sequential(nn.Flatten(),
-                                                  nn.Linear(num_ftrs, self.logits))
-                
-                self.layers = list(self.model.children())
-
-            def forward(self, x):
-                for i, l in enumerate(self.layers):
-                    if i > self.cut_layer:
-                        break
-                    x = l(x)
-                return x
-
-        config = {"cut_layer": int(cut_layer), "logits": 10}
-        client_model = ResNet18Client(config).to(device)
+        model_config = {"cut_layer": int(cut_layer), "logits": self.config['logits']}
+        client_model = arch.client(model_config).to(device)
 
         client_optimizer = optim.SGD(
             client_model.parameters(), lr=0.01, momentum=0.9)
@@ -325,7 +277,6 @@ class Runner:
             url = split_address + ":"+ str(split_port)
             socket.connect(url)
             # socket.connect("tcp://35.237.244.119:5555")
-
 
             socket.send(b"term?")
             term = bool(int(socket.recv().decode()))
