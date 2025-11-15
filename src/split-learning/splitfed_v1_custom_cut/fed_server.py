@@ -87,14 +87,24 @@ class Runner:
         with open(test_file_tmp, 'rb') as handle:
             testset = pickle.load(handle)
 
+        urllib.request.urlretrieve(self.config['data_server']['server_address']+"/"+output_file, output_file)
+
+        with open(output_file, 'rb') as handle:
+            datasets = pickle.load(handle)
 
 
-        transformer = transforms.Compose([
-                transforms.ToTensor(),
-                transforms.Normalize((0.4914, 0.4822, 0.4465),
-                                        (0.2023, 0.1994, 0.2010))
-            ])
+
+        # transformer = transforms.Compose([
+        #         transforms.ToTensor(),
+        #         transforms.Normalize((0.4914, 0.4822, 0.4465),
+        #                                 (0.2023, 0.1994, 0.2010))
+        #     ])
         
+        transformer = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.1307,), (0.3081,))
+        ])
+
         
         valset = TransformedDataset(valset, transform=transformer)
         testset = TransformedDataset(testset, transform=transformer)
@@ -113,6 +123,15 @@ class Runner:
                                     persistent_workers=False
         )
 
+        transformed_client_test_loaders = []
+        for dataset in datasets:
+            dataset = TransformedDataset(dataset, transform=transformer)
+            transformed_client_test_loaders.append(torch.utils.data.DataLoader(dataset,
+                                    batch_size=self.config['batch_size'],
+                                    shuffle=False,
+                                    num_workers=0,
+                                    persistent_workers=False
+        ))
         
 
         class ResNet18Client(nn.Module):
@@ -123,6 +142,8 @@ class Runner:
                 self.cut_layer = cut_layer
 
                 self.model = models.resnet18(weights=None)
+                self.model.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False) #MNIST change
+
 
                 num_ftrs = self.model.fc.in_features
                 self.model.fc = nn.Sequential(nn.Flatten(),
@@ -331,7 +352,6 @@ class Runner:
                 '''
                 VAL SET - FOR EARLY STOPPING
                 '''
-
                 val_iters = len(valloader)
                 send_val_iters = str(val_iters).encode()
                 serv_socket.send(send_val_iters)
@@ -405,6 +425,38 @@ class Runner:
 
 
                 test_model.train()
+
+
+                        
+                '''
+                ALL CLIENT TESTS
+                '''
+                test_model.eval()
+                with torch.no_grad():
+                    for client_num, client_loader in enumerate(transformed_client_test_loaders):
+                        serv_socket.send(str(len(client_loader)).encode())
+                        serv_socket.recv()
+
+                        bar = tqdm(client_loader, desc=f"Client {client_num}: ", unit='', ascii=True,
+                           bar_format='{desc} {n_fmt}/{total_fmt} {percentage:3.0f}%|{bar}| {postfix}')
+
+                        for data in bar:
+                            inputs, labels = data[0].to(device), data[1].to(device)
+
+                            #send labels
+                            bytes_labels = convert.array_to_bytes(labels.cpu())
+                            serv_socket.send(bytes_labels)
+                            serv_socket.recv()
+
+                            #send activations
+                            activations = test_model(inputs)
+                            server_inputs = activations.detach().clone()
+                            bytes_server_inputs = convert.array_to_bytes(server_inputs.cpu())
+
+                            serv_socket.send(bytes_server_inputs)
+                            serv_socket.recv()
+
+
 
                 serv_socket.close()
                 serv_context.term()

@@ -141,13 +141,18 @@ class Runner:
 
          #Data Preparation
 
-        #transforms for CIFAR-10
+        # #transforms for CIFAR-10
+        # transformer = transforms.Compose([
+        #     transforms.RandomCrop(32, padding=4),
+        #     transforms.RandomHorizontalFlip(),
+        #     transforms.ToTensor(),
+        #     transforms.Normalize((0.4914, 0.4822, 0.4465),
+        #                              (0.2023, 0.1994, 0.2010))
+        # ])
+
         transformer = transforms.Compose([
-            transforms.RandomCrop(32, padding=4),
-            transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            transforms.Normalize((0.4914, 0.4822, 0.4465),
-                                     (0.2023, 0.1994, 0.2010))
+            transforms.Normalize((0.1307,), (0.3081,))
         ])
 
         # transformer_eval = transforms.Compose([
@@ -247,6 +252,8 @@ class Runner:
                 self.cut_layer = cut_layer
 
                 self.model = models.resnet18(weights=None)
+                self.model.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False) #MNIST change
+
 
                 num_ftrs = self.model.fc.in_features
                 self.model.fc = nn.Sequential(nn.Flatten(),

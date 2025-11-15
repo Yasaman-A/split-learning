@@ -34,6 +34,11 @@ def get_cifar10():
 
     return training_data, testing_data
 
+def get_mnist():
+    training_data = tv.datasets.MNIST(root="./data", train=True, download=True)
+    testing_data  = tv.datasets.MNIST(root="./data", train=False, download=True)
+
+    return training_data, testing_data
 
 
 '''
@@ -45,6 +50,7 @@ Wrappers
 DATASET_GETTERS = {
     'cifar10': get_cifar10,
     'cifar-10': get_cifar10,
+    'mnist': get_mnist
 }
 
 def fetch_data(dataset_name):

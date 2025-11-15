@@ -10,6 +10,7 @@ class ResNet18(nn.Module):
         super(ResNet18, self).__init__()
 
         self.model = models.resnet18(weights=None)
+        self.model.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False) #MNIST change
 
         self.logits = 10
         num_ftrs = self.model.fc.in_features
@@ -74,6 +75,8 @@ def average_models(server: bool, model_list, datasizes, cut_layer_list):
 
 
     return weights_avg, weight_exposure
+
+
 
 
 def custom_model_avg(server: bool, state_dicts, data_size, cut_layer_list):
