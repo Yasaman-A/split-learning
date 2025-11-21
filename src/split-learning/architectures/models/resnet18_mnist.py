@@ -8,7 +8,7 @@ from ..architecture_bundle import ArchitectureBundle
 class ResNet18(nn.Module):
     """docstring for ResNet"""
 
-    def __init__(self):
+    def __init__(self, config):
         super(ResNet18, self).__init__()
 
         self.model = models.resnet18(weights=None)
