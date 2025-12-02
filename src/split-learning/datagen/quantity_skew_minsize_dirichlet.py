@@ -259,16 +259,27 @@ def run(data, alpha_quant_split, num_clients, seed=None):
 
     images, labels = zip(*data)
 
-    list_x_train, list_y_train, distances = create_quantity_skew_minsize_dirichlet_with_fedartml(
-        images,
-        labels,
-        n_clients=num_clients,
-        alpha_quant_split=alpha_quant_split,
-        seed=seed
+    # Convert labels to list of integers (handle numpy arrays and other types)
+    # fedartml requires hashable types (integers), not numpy arrays
+    labels = [
+        int(label.item()) if isinstance(label, np.ndarray) else int(label)
+        for label in labels
+    ]
+
+    list_x_train, list_y_train, distances = (
+        create_quantity_skew_minsize_dirichlet_with_fedartml(
+            images,
+            labels,
+            n_clients=num_clients,
+            alpha_quant_split=alpha_quant_split,
+            seed=seed,
+        )
     )
 
-    list_x_train_pil = [[Image.fromarray(img.astype('uint8')) 
-                        for img in client_imgs] for client_imgs in list_x_train]
+    list_x_train_pil = [
+        [Image.fromarray(img.astype("uint8")) for img in client_imgs]
+        for client_imgs in list_x_train
+    ]
 
     # Print quantity skew distances after data generation
     if distances and "without_class_completion_quant" in distances:

@@ -175,6 +175,7 @@ def create_feature_skew_with_fedartml(
 
     return list_x_train, list_y_train, distances
 
+
 def create_fallback_feature_skew(data, labels, n_clients, verbose=True):
     """
     Fallback method for feature skew when FedArtML is not available.
@@ -238,16 +239,21 @@ def run(data, alpha_feat_split, num_clients, seed):
 
     images, labels = zip(*data)
 
+    # Convert labels to list of integers (handle numpy arrays and other types)
+    # fedartml requires hashable types (integers), not numpy arrays
+    labels = [
+        int(label.item()) if isinstance(label, np.ndarray) else int(label)
+        for label in labels
+    ]
+
     list_x_train, list_y_train, distances = create_feature_skew_with_fedartml(
-        images, 
-        labels, 
-        num_clients, 
-        alpha_feat_split=alpha_feat_split, 
-        seed=seed
+        images, labels, num_clients, alpha_feat_split=alpha_feat_split, seed=seed
     )
 
-    list_x_train_pil = [[Image.fromarray(img.astype('uint8')) 
-                        for img in client_imgs] for client_imgs in list_x_train]
+    list_x_train_pil = [
+        [Image.fromarray(img.astype("uint8")) for img in client_imgs]
+        for client_imgs in list_x_train
+    ]
 
     # Print feature skew distances after data generation
     if distances and "without_class_completion_feat" in distances:
@@ -270,9 +276,6 @@ def run(data, alpha_feat_split, num_clients, seed):
         print("HD_glob_feat: N/A (distances not available)")
         print("EMD_glob_feat: N/A (distances not available)")
         print("=" * 50)
-
-
-
 
     return [list(zip(x, y)) for x, y in zip(list_x_train_pil, list_y_train)]
 

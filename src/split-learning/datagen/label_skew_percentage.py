@@ -22,7 +22,6 @@ except ImportError:
     print("Warning: fedartml not available. Install with: pip install fedartml")
 
 
-
 def print_image_data_stats(data_train, labels_train, data_test, labels_test):
     print("\nData: ")
     print(
@@ -308,7 +307,6 @@ def print_image_data_stats(x_train, y_train, x_test, y_test):
     print(f"Classes: {np.unique(y_train)}")
 
 
-
 def run(data, percentage_skew, num_clients):
     """
     Main function to create label-skewed federated data using FedArtML percentage method.
@@ -325,6 +323,13 @@ def run(data, percentage_skew, num_clients):
 
     images, labels = zip(*data)
 
+    # Convert labels to list of integers (handle numpy arrays and other types)
+    # fedartml requires hashable types (integers), not numpy arrays
+    labels = [
+        int(label.item()) if isinstance(label, np.ndarray) else int(label)
+        for label in labels
+    ]
+
     list_x_train, list_y_train, distances = create_label_skew_percentage_with_fedartml(
         images,
         labels,
@@ -332,10 +337,11 @@ def run(data, percentage_skew, num_clients):
         percentage_skew=percentage_skew,
     )
 
-    list_x_train_pil = [[Image.fromarray(img.astype('uint8')) 
-                        for img in client_imgs] for client_imgs in list_x_train]
+    list_x_train_pil = [
+        [Image.fromarray(img.astype("uint8")) for img in client_imgs]
+        for client_imgs in list_x_train
+    ]
 
-                        
     # Print label skew distances after data generation
     if distances and "without_class_completion" in distances:
         JSD_glob_label = distances["without_class_completion"]["jensen-shannon"]

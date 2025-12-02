@@ -32,7 +32,14 @@ from .datagen.viz import visualize_client_distribution
 import argparse
 
 
-def get_short_output_name(data_type, alpha_feat_split=None, alpha_label_split=None, alpha_quant_split=None, sigma_noise=None, percentage_skew=None):
+def get_short_output_name(
+    data_type,
+    alpha_feat_split=None,
+    alpha_label_split=None,
+    alpha_quant_split=None,
+    sigma_noise=None,
+    percentage_skew=None,
+):
     """Generate short output names based on data type and parameters."""
     if data_type == "iid":
         return "iid"
@@ -166,9 +173,9 @@ class Main:
                     args.alpha_label_split,
                     args.alpha_quant_split,
                     args.sigma_noise,
-                    args.percentage_skew
+                    args.percentage_skew,
                 )
-            
+
             match args.data_type:
                 case "iid":
                     print(f"Generating IID dataset with {args.num_clients} clients")
@@ -276,7 +283,7 @@ class Main:
 
                     # Use the same output name that was used for data generation
                     output_name = args.output_name
-                    
+
                     pickle_file = f"{output_name}.pkl"
 
                     # Check if pickle file exists

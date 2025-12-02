@@ -262,6 +262,14 @@ def run(data, alpha_label_split, num_clients, seed=None):
 
     images, labels = zip(*data)
 
+    # Convert labels to list of integers (handle numpy arrays and other types)
+    # This is necessary for datasets like DermaMNIST that return numpy arrays
+    # fedartml requires hashable types (integers), not numpy arrays
+    labels = [
+        int(label.item()) if isinstance(label, np.ndarray) else int(label)
+        for label in labels
+    ]
+
     list_x_train, list_y_train, distances = create_label_skew_with_fedartml(
         images, labels, num_clients, alpha_label_split=alpha_label_split, seed=seed
     )

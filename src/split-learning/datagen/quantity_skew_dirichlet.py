@@ -240,7 +240,6 @@ def create_fallback_quantity_skew(data, labels, n_clients, verbose=True):
     return list_x_train, list_y_train
 
 
-
 def run(data, alpha_quant_split, num_clients, seed=None):
     """
     Main function to create quantity-skewed federated data using FedArtML.
@@ -256,12 +255,21 @@ def run(data, alpha_quant_split, num_clients, seed=None):
 
     images, labels = zip(*data)
 
+    # Convert labels to list of integers (handle numpy arrays and other types)
+    # fedartml requires hashable types (integers), not numpy arrays
+    labels = [
+        int(label.item()) if isinstance(label, np.ndarray) else int(label)
+        for label in labels
+    ]
+
     list_x_train, list_y_train, distances = create_quantity_skew_with_fedartml(
         images, labels, num_clients, alpha_quant_split, seed=seed
     )
 
-    list_x_train_pil = [[Image.fromarray(img.astype('uint8')) 
-                        for img in client_imgs] for client_imgs in list_x_train]
+    list_x_train_pil = [
+        [Image.fromarray(img.astype("uint8")) for img in client_imgs]
+        for client_imgs in list_x_train
+    ]
 
     # Print quantity skew distances after data generation
     if distances and "without_class_completion_quant" in distances:

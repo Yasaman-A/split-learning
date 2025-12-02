@@ -49,23 +49,24 @@ Parameters:
 
 
 def convert_data_to_numpy(data):
-    
+
     x_list = []
     y_list = []
     for image, label in data:
         if isinstance(image, torch.Tensor):
             image_np = image.numpy()
-        elif hasattr(image, 'convert'):
+        elif hasattr(image, "convert"):
             image_np = np.array(image)
         elif isinstance(image, np.ndarray):
             image_np = image
 
         x_list.append(image_np)
         y_list.append(label)
-    
+
     x_train, y_train = np.stack(x_list), np.array(y_list)
 
     return zip(x_train, y_train)
+
 
 def print_image_data_stats(data_train, labels_train, data_test, labels_test):
     print("\nData: ")
@@ -132,7 +133,7 @@ def create_feature_skew_gaussian_with_fedartml(
     n_bins="n_samples",
     feat_sample_rate=0.1,
     verbose=True,
-    seed=None
+    seed=None,
 ):
     """
     Create feature skew using FedArtML library with Gaussian noise method.
@@ -253,9 +254,9 @@ def create_fallback_feature_skew(data, labels, n_clients, verbose=True):
     return list_x_train, list_y_train
 
 
-
-
-def run(data, sigma_noise, num_clients, n_bins="n_samples", feat_sample_rate=0.1, seed=None):
+def run(
+    data, sigma_noise, num_clients, n_bins="n_samples", feat_sample_rate=0.1, seed=None
+):
     """
     Main function to create feature-skewed federated data using FedArtML's Gaussian noise method.
     This function follows the same interface as other modules for compatibility.
@@ -276,19 +277,27 @@ def run(data, sigma_noise, num_clients, n_bins="n_samples", feat_sample_rate=0.1
 
     images, labels = zip(*data)
 
+    # Convert labels to list of integers (handle numpy arrays and other types)
+    # fedartml requires hashable types (integers), not numpy arrays
+    labels = [
+        int(label.item()) if isinstance(label, np.ndarray) else int(label)
+        for label in labels
+    ]
+
     list_x_train, list_y_train, distances = create_feature_skew_gaussian_with_fedartml(
-        images, 
-        labels, 
+        images,
+        labels,
         num_clients,
         sigma_noise=sigma_noise,
         n_bins=n_bins,
         feat_sample_rate=feat_sample_rate,
-        seed=seed
+        seed=seed,
     )
 
-    list_x_train_pil = [[Image.fromarray(img.astype('uint8')) 
-                        for img in client_imgs] for client_imgs in list_x_train]
-
+    list_x_train_pil = [
+        [Image.fromarray(img.astype("uint8")) for img in client_imgs]
+        for client_imgs in list_x_train
+    ]
 
     # Print feature skew distances after data generation
     if distances and "without_class_completion_feat" in distances:

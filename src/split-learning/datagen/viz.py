@@ -31,19 +31,27 @@ def visualize_client_distribution(data, output_name="output", selected_clients=N
 
     # Extract client data - data is a list of client datasets
     num_clients = len(data)
-    num_classes = 10  # CIFAR-10 has 10 classes
-    class_names = [
-        "airplane",
-        "automobile",
-        "bird",
-        "cat",
-        "deer",
-        "dog",
-        "frog",
-        "horse",
-        "ship",
-        "truck",
-    ]
+
+    # Dynamically determine the number of classes from the data
+    all_labels = []
+    for client_data in data:
+        for sample in client_data:
+            if len(sample) >= 2:  # Assuming (features, label) format
+                label = sample[1]
+                # Handle numpy arrays and other types
+                if isinstance(label, np.ndarray):
+                    label = int(label.item())
+                else:
+                    label = int(label)
+                all_labels.append(label)
+
+    if all_labels:
+        num_classes = max(all_labels) + 1  # Classes are 0-indexed
+    else:
+        num_classes = 10  # Default fallback
+
+    # Generic class names (can be customized per dataset)
+    class_names = [f"Class {i}" for i in range(num_classes)]
 
     # Filter clients if specified
     if selected_clients is not None:
@@ -62,6 +70,11 @@ def visualize_client_distribution(data, output_name="output", selected_clients=N
             for sample in client_samples:
                 if len(sample) >= 2:  # Assuming (features, label) format
                     label = sample[1]
+                    # Handle numpy arrays and other types
+                    if isinstance(label, np.ndarray):
+                        label = int(label.item())
+                    else:
+                        label = int(label)
                     if 0 <= label < num_classes:
                         class_counts[label] += 1
             client_data.append(class_counts)
@@ -224,7 +237,13 @@ def create_detailed_visualization(client_data, output_name="output"):
     """Create a more detailed visualization focusing on class imbalance."""
 
     num_clients = len(client_data)
-    num_classes = 10
+    # Dynamically determine number of classes from client_data
+    if client_data and len(client_data) > 0:
+        num_classes = len(
+            client_data[0]
+        )  # Number of classes = length of first client's class counts
+    else:
+        num_classes = 10  # Default fallback
 
     # Create a large figure with multiple subplots
     fig, axes = plt.subplots(3, 2, figsize=(20, 15))
