@@ -5,14 +5,14 @@ log_steps: 50
 
 #cpu OR gpu
 device: gpu
-client_total: 3
+client_total: 2
 epoch: 2
 round: 2
 batch_size: 32
 
 patience: 5
 test_cut_layer: 4
-model_architecture: "ResNet18_CIFAR10"
+model_architecture: "ResNet18_MNIST"
 logits: 10
 
 # n for no_split, s: for getting split i from data server, Any number for the number of i.i.d splits.
