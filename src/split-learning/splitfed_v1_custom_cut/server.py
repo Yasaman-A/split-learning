@@ -415,17 +415,22 @@ class Runner:
                         outputs = fed_model(server_inputs)
                         _, predicted = torch.max(outputs.data, 1)
 
+                        # Flatten to 1D tensors to ensure consistent indexing
+                        predicted = predicted.view(-1)
+                        labels = labels.view(-1)
+
                         correct += (predicted == labels).sum().item()
                         total += labels.size(0)
 
                         for class_idx in range(test_config["logits"]):
                             mask = labels == class_idx
                             total_per_class[class_idx] += mask.sum().item()
-                            correct_per_class[class_idx] += (
-                                (predicted[mask] == class_idx).sum().item()
-                            )
+                            if mask.any():  # Only index if mask has True values
+                                correct_per_class[class_idx] += (
+                                    (predicted[mask] == class_idx).sum().item()
+                                )
 
-                        for t, p in zip(labels.view(-1), predicted.view(-1)):
+                        for t, p in zip(labels, predicted):
                             confusion_matrix[t.long(), p.long()] += 1
 
                 accuracy = (correct / total) * 100 if total > 0 else 0
@@ -529,17 +534,22 @@ class Runner:
                         outputs = fed_model(server_inputs)
                         _, predicted = torch.max(outputs.data, 1)
 
+                        # Flatten to 1D tensors to ensure consistent indexing
+                        predicted = predicted.view(-1)
+                        labels = labels.view(-1)
+
                         correct += (predicted == labels).sum().item()
                         total += labels.size(0)
 
                         for class_idx in range(test_config["logits"]):
                             mask = labels == class_idx
                             total_per_class[class_idx] += mask.sum().item()
-                            correct_per_class[class_idx] += (
-                                (predicted[mask] == class_idx).sum().item()
-                            )
+                            if mask.any():  # Only index if mask has True values
+                                correct_per_class[class_idx] += (
+                                    (predicted[mask] == class_idx).sum().item()
+                                )
 
-                        for t, p in zip(labels.view(-1), predicted.view(-1)):
+                        for t, p in zip(labels, predicted):
                             confusion_matrix[t.long(), p.long()] += 1
 
                 accuracy = (correct / total) * 100 if total > 0 else 0

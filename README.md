@@ -65,15 +65,145 @@ Clients in this architecture can have differing cut layers. The current implemen
 - `python -m src.split-learning --mode splitfed_v2_custom_cut --client 1 --extra 2`
 
 
+## Model Architecture System
+
+The repository uses a flexible model architecture system that allows easy addition of new model architectures. All model architectures implemented in the proper location are automatically discovered and registered at runtime.
+
+### Available Model Architectures
+
+The following model architectures are currently available:
+
+1. **ResNet18_CIFAR10**: ResNet18 adapted for CIFAR-10 (32x32 RGB, 10 classes)
+2. **ResNet18_MNIST**: ResNet18 adapted for MNIST (28x28 grayscale, 10 classes)
+3. **SimpleCNN_MNIST**: Custom CNN for MNIST (28x28 grayscale, 10 classes)
+4. **ResNet18_DermaMNIST**: ResNet18 adapted for DermaMNIST (28x28 RGB, 7 classes)
+5. **EfficientNet_DermaMNIST**: EfficientNet-B0 adapted for DermaMNIST (28x28 RGB, 7 classes)
+
+### Configuration
+
+Model architectures are specified in the `config.yaml` file for each split learning mode:
+
+```yaml
+model_architecture: "ResNet18_CIFAR10"  # Name of the model architecture
+logits: 10  # Number of output classes
+```
+
+**Note**: Architecture names are case-insensitive (e.g., `"resnet18_cifar10"` and `"ResNet18_CIFAR10"` are equivalent).
+
+### Creating New Model Architectures
+
+To create a new model architecture, create a new file in `src/split-learning/architectures/models/` following this structure:
+
+```python
+import torch.nn as nn
+from torchvision import transforms
+from ..model_registry import register
+from ..architecture_bundle import ArchitectureBundle
+
+# 1. Base Model (complete model, no splitting)
+class YourModel(nn.Module):
+    def __init__(self, config):
+        super(YourModel, self).__init__()
+        # ... model definition ...
+        self.logits = config["logits"]
+        self.layers = list(self.model.children())  # For split learning
+
+# 2. Client Model (forward pass stops at cut_layer)
+class YourModelClient(nn.Module):
+    def __init__(self, config):
+        super(YourModelClient, self).__init__()
+        self.cut_layer = config["cut_layer"]
+        # ... model definition ...
+        self.layers = list(self.model.children())
+    
+    def forward(self, x):
+        for i, l in enumerate(self.layers):
+            if i > self.cut_layer:
+                break
+            x = l(x)
+        return x
+
+# 3. Server Model (forward pass starts after cut_layer)
+class YourModelServer(nn.Module):
+    def __init__(self, config):
+        super(YourModelServer, self).__init__()
+        self.cut_layer = config["cut_layer"]
+        # ... model definition ...
+        self.layers = list(self.model.children())
+    
+    def forward(self, x):
+        for i, l in enumerate(self.layers):
+            if i <= self.cut_layer:
+                continue
+            x = l(x)
+        return x
+    
+    def classify(self, x):
+        return nn.functional.softmax(self.forward(x))
+
+# 4. Training Transformer (can include augmentations)
+transformer = transforms.Compose([
+    transforms.RandomCrop(32, padding=4),
+    transforms.RandomHorizontalFlip(),
+    transforms.ToTensor(),
+    transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+])
+
+# 5. Evaluation Transformer (no augmentations)
+eval_transformer = transforms.Compose([
+    transforms.ToTensor(),
+    transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+])
+
+# 6. Register the architecture
+@register("YourModel_Name")
+def grab():
+    return ArchitectureBundle(
+        base=YourModel,
+        client=YourModelClient,
+        server=YourModelServer,
+        training_transformer=transformer,
+        eval_transformer=eval_transformer,
+    )
+```
+
+**Important Notes:**
+- The model file must be placed in `src/split-learning/architectures/models/`
+- The file will be automatically imported and registered at runtime
+- All three model classes (base, client, server) must be implemented
+- Both transformers (training and eval) must be provided
+- The architecture must be registered using the `@register()` decorator
+- For compatibility with model averaging, ensure layers are accessible via `self.model` (see `resnet18_cifar10.py` or `simplecnn_mnist.py` for examples)
+
+For complete examples, see:
+- `src/split-learning/architectures/models/resnet18_cifar10.py` (torchvision model)
+- `src/split-learning/architectures/models/simplecnn_mnist.py` (custom model)
+
 ## Splitting Data
+
 Multiple data splitting strategies are implemented based on fedArtML library [[3]](#3). These scripts can create Label, Feature, and Quantity skews for the non-iid data.
 
-Each splitting strategy also accepts the following additional parameters:
-`--dataset_name`: Name of the dataset to use for generation (e.g. 'cifar10') **REQUIRED**
-`--output_name`: Name of the output files. Will create {output_name}.pkl, {output_name}_test.pkl, and {output_name}_val.pkl  
-`--seed`: Seed to fix random generation to. Leave unassigned for randomized generation.
+### Supported Datasets
 
-In addition, each 
+The following datasets are currently supported:
+- **CIFAR-10**: 32x32 RGB images, 10 classes
+- **MNIST**: 28x28 grayscale images, 10 classes
+- **DermaMNIST**: 28x28 RGB images, 7 classes (from MedMNIST)
+- **OrganAMNIST (Axial)**: 28x28 RGB images, 11 classes (from MedMNIST)
+- **OrganCMNIST (Coronal)**: 28x28 RGB images, 11 classes (from MedMNIST)
+- **OrganSMNIST (Sagittal)**: 28x28 RGB images, 11 classes (from MedMNIST)
+
+More datasets can be added by implementing a getter function in `src/split-learning/datagen/data_manager.py`.
+
+### Data Generation Parameters
+
+Each splitting strategy accepts the following parameters:
+- `--dataset_name`: Name of the dataset to use for generation (e.g., 'cifar10', 'mnist', 'dermamnist') **REQUIRED**
+- `--data_type`: Type of data splitting strategy (see below)
+- `--num_clients`: Number of clients to split data among **REQUIRED**
+- `--output_name`: Name of the output files. Will create `{output_name}.pkl`, `{output_name}_test.pkl`, and `{output_name}_val.pkl`
+- `--seed`: Seed to fix random generation to. Leave unassigned for randomized generation.
+- `--viz`: Optional flag to visualize the data distribution after generation
 
 The following are the implemented data splitting strategies:
 - `iid`
@@ -100,35 +230,53 @@ The following are the implemented data splitting strategies:
     - num_clients
     - alpha_quant_split (smaller = more non-IID)
 
-Below are example commands to run in project `root` to use the various data splitting strategies.
+### Example Commands
 
-`python -m src.split-learning --generate --dataset_name cifar10 --data_type iid --num_clients 6`
+Below are example commands to run in project `root` to use the various data splitting strategies:
 
-`python -m src.split-learning --generate --dataset_name cifar10 --data_type non-iid --num_clients 6 --classes_pc 2`
+**CIFAR-10 Examples:**
+```bash
+python -m src.split-learning --generate --dataset_name cifar10 --data_type iid --num_clients 6
+python -m src.split-learning --generate --dataset_name cifar10 --data_type non-iid --num_clients 6 --classes_pc 2
+python -m src.split-learning --generate --dataset_name cifar10 --data_type label_skew_dirichlet --alpha_label_split 0.1 --num_clients 3
+python -m src.split-learning --generate --dataset_name cifar10 --data_type label_skew_percentage --percentage_skew 0.5 --num_clients 2
+python -m src.split-learning --generate --dataset_name cifar10 --data_type feature_skew_dirichlet --alpha_feat_split 0.1 --num_clients 3
+python -m src.split-learning --generate --dataset_name cifar10 --data_type feature_skew_gaussian --sigma_noise 1 --num_clients 3
+python -m src.split-learning --generate --dataset_name cifar10 --data_type quantity_skew_dirichlet --alpha_quant_split 0.1 --num_clients 3
+python -m src.split-learning --generate --dataset_name cifar10 --data_type quantity_skew_minsize_dirichlet --alpha_quant_split 0.1 --num_clients 3
+```
 
-`python -m src.split-learning --generate --dataset_name cifar10 --data_type label_skew_dirichlet --alpha_label_split 0.1 --num_clients 3`
+**MNIST Examples:**
+```bash
+python -m src.split-learning --generate --dataset_name mnist --data_type label_skew_dirichlet --alpha_label_split 0.1 --num_clients 5 --output_name output_mnist --seed 42
+```
 
-`python -m src.split-learning --generate --dataset_name cifar10 --data_type label_skew_percentage --percentage_skew 0.5 --num_clients 2`
+**DermaMNIST Examples:**
+```bash
+python -m src.split-learning --generate --dataset_name dermamnist --data_type label_skew_dirichlet --alpha_label_split 100 --num_clients 5 --output_name output_dermamnist --seed 42 --viz
+```
 
-`python -m src.split-learning --generate --dataset_name cifar10 --data_type feature_skew_dirichlet --alpha_feat_split 0.1 --num_clients 3`
+**Example calls with additional parameters:**
+```bash
+python -m src.split-learning --generate --dataset_name cifar10 --output_name output --num_clients 6 --seed 42
+python -m src.split-learning --generate --dataset_name cifar10 --data_type quantity_skew_minsize_dirichlet --alpha_quant_split 0.1 --num_clients 3 --output_name minsize_fixed_42 --seed 42
+python -m src.split-learning --generate --dataset_name cifar10 --data_type quantity_skew_minsize_dirichlet --alpha_quant_split 0.0005 --num_clients 5 --seed 42 --viz
+```
 
-`python -m src.split-learning --generate --dataset_name cifar10 --data_type feature_skew_gaussian --sigma_noise 1 --num_clients 3`
+### Data Server Setup
 
-`python -m src.split-learning --generate --dataset_name cifar10 --data_type quantity_skew_dirichlet --alpha_quant_split 0.1 --num_clients 3`
+The generated pickle files should be placed in the data server directory. The data server can be started using:
 
-`python -m src.split-learning --generate --dataset_name cifar10 --data_type quantity_skew_minsize_dirichlet --alpha_quant_split 0.1 --num_clients 3`
+```bash
+python -m http.server <port_number>
+```
 
+For example:
+```bash
+python -m http.server 8000
+```
 
-The generated pickle files should be placed on the data server directory. Data server can be started using: `python -m http.server port_number`, e.g. `python -m http.server 8000`
-
-
-Example calls with additional parameters are as follows:
-
-`python -m src.split-learning --generate --dataset_name cifar10 --output_name output --num_clients 6 --seed 42`  
-`python -m src.split-learning --generate --dataset_name cifar10 --data_type quantity_skew_minsize_dirichlet --alpha_quant_split 0.1 --num_clients 3 --output_name minsize_fixed_42 --seed 42`
-`python -m src.split-learning --generate --dataset_name cifar10 --data_type quantity_skew_minsize_dirichlet --alpha_quant_split 0.0005 --num_clients 5 --seed 42 --viz`  
-
-More datasets may be added to the datamanager by adding a simple getter function to the dictionary of datasets.
+Make sure the `output_file` in your `config.yaml` matches the generated pickle file name (without the `.pkl` extension). For example, if you generated `output_cifar10.pkl`, set `output_file: output_cifar10.pkl` in the config.
 
 ### Data Visualization
 The generated data can be visualzied by passing --viz input to the data generator commands.
@@ -137,11 +285,42 @@ The data visualization script can be calleded directly by passing an already gen
 
 `python src/split-learning/datagen/viz.py --pickle_file ld_0.01.pkl --detailed --clients "0,1,2"`
 
+## Configuration
+
+Both client and server files read the setup configuration from `config.yaml` file. The config file location depends on the split learning mode (e.g., `splitfed_v1_custom_cut/config.yaml`).
+
+### Key Configuration Parameters
+
+- `model_architecture`: Name of the model architecture to use (e.g., `"ResNet18_CIFAR10"`, `"ResNet18_DermaMNIST"`)
+- `logits`: Number of output classes (e.g., `10` for CIFAR-10/MNIST, `7` for DermaMNIST)
+- `client_total`: Total number of clients
+- `epoch`: Number of training epochs per round
+- `round`: Number of federated learning rounds
+- `batch_size`: Batch size for training
+- `test_cut_layer`: Cut layer index for evaluation
+- `data_server.output_file`: Name of the pickle file to download from the data server
+
+### Example Configuration
+
+```yaml
+model_architecture: "ResNet18_CIFAR10"
+logits: 10
+client_total: 2
+epoch: 5
+round: 2
+batch_size: 32
+test_cut_layer: 4
+data_server:
+  server_address: http://127.0.0.1:8000
+  output_file: output_cifar10.pkl
+```
+
 ## Common Files
-- **Convert**: This is a utility file that contains some conversion utility methods.
-- **Config**: Both client and server files read the setup configuration from config.yaml file. The config file for different architectures are sligthly different (depending on what parameters were required for each implementation).
-- **CustomImageDataset**: This file is used for reading the datasert transfered over socket. (TODO)
-- **app.py** The src/split-learning/app.py file is the file that runs the other codes. 
+
+- **Convert**: Utility file containing conversion utility methods for data serialization.
+- **Config**: Configuration files (`config.yaml`) that specify parameters for each split learning mode.
+- **CustomImageDataset**: Used for reading datasets transferred over socket.
+- **app.py**: Main entry point (`src/split-learning/app.py`) that orchestrates the split learning execution. 
 
 
 ## Scripts
