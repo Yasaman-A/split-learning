@@ -48,10 +48,6 @@ class Runner:
             self.config = yaml.load(yamlfile, Loader=yaml.FullLoader)
             print("Read successful")
 
-        # Variables to track communication overhead
-        self.total_activation_size = 0.0
-        self.total_loss_size = 0.0
-
     def set_extra_options(self, extra):
         self.input_cut_layer = atoi(extra)
 
@@ -102,11 +98,7 @@ class Runner:
             print(device)
     
             # Data Preparation
-    
-            # transforms for CIFAR-10
             transformer = arch.training_transformer
-            transformer_eval = arch.eval_transformer
-    
             batch_size = self.config["batch_size"]
     
             # Data Splitting
@@ -162,13 +154,6 @@ class Runner:
                 persistent_workers=True,
             )
     
-            # testloader = torch.utils.data.DataLoader(testset,
-            #                                     batch_size=batch_size,
-            #                                     shuffle=False,
-            #                                     num_workers=0,
-            #                                     drop_last=True,
-            #                                     persistent_workers=False
-            # )
             datasetsize_used = len(trainloader.dataset)
     
             model_config = {"cut_layer": int(cut_layer), "logits": logits}
@@ -247,7 +232,7 @@ class Runner:
                                 unit="",
                                 ascii=True,
                                 bar_format="{desc} {n_fmt}/{total_fmt} {percentage:3.0f}%|{bar}| {postfix}",
-                            )
+                                )
                             with metrics.epoch_training_timer():
                                 for data in bar:
                                     with metrics.step_timer():
