@@ -14,7 +14,8 @@ import time
 import pickle
 import zmq
 import torch
-from ..lib import convert, metrics
+from ..lib import convert
+from ..lib.metrics import Metrics
 from ..architectures import get_architecture_bundle
 from sys import getsizeof
 import numpy as np
@@ -185,7 +186,7 @@ class Runner:
                             print("GLOBAL_CLIENT_WEIGHTS_LOADED")
                             del global_numpy_weights
             
-                        logging.info(f"\n********ROUND {r}********\n")
+                        logging.info(f"********ROUND {r}********\n")
             
                         # Connect to Split Server
                         context = zmq.Context()
@@ -207,7 +208,7 @@ class Runner:
                         print(iterations)
                         send_iterations = str(iterations).encode()
                         socket.send(send_iterations)
-                        metrics.round_.sent_to_split += len(send_iterations)
+                        metrics.round.sent_to_split += len(send_iterations)
             
                         names = socket.recv()
                         metrics.round.recv_from_split += len(names)
@@ -223,7 +224,7 @@ class Runner:
                         #END ROUND_INIT_TIMER
         
                     for epoch in range(num_epochs):
-                        logging.info(f"\n********EPOCH {epoch}********\n")
+                        logging.info(f"********EPOCH {epoch}********\n")
                         
                         with metrics.epoch_running_timer():
                             bar = tqdm(
@@ -272,12 +273,12 @@ class Runner:
                                     bar.set_postfix(
                                         {
                                             "step_time": f"{metrics.last_step_time:.3f}",
-                                            "server_time": f"{metrics.server_work_time:.3f}",
+                                            "server_time": f"{metrics.last_server_work_time:.3f}",
                                         }
                                     )
                                     logging.info(
                                         f"CLIENT_TOTAL_ONE_STEP_TIME = {metrics.last_step_time:.3f}    , "
-                                        f"SERVER_WORK_TIME = {metrics.server_work_time:.3f}"
+                                        f"SERVER_WORK_TIME = {metrics.last_server_work_time:.3f}"
                                     )
                                     # BATCH OVER
                                 #END EPOCH_TRAIN_TIMER
@@ -360,10 +361,10 @@ class Runner:
                     ====================================================
                     """
         
-                    with metric.weights_waiting_timer():
+                    with metrics.weights_receiving_timer():
                         global_weights = socket1.recv()
                         metrics.round.recv_from_fed += len(global_weights)
-                        #END WEIGHTS_WAITING_TIMER
+                        #END WEIGHTS_RECEIVING_TIMER
         
                     socket1.close()
                     context1.term()

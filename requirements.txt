@@ -8,3 +8,4 @@ fedartml==0.1.34
 #torchvision==0.21.0+cu126  -- INSTALL PROPER VERSION W/ TORCH WHEELS
 tqdm==4.66.5
 scikit-learn
+medmnist

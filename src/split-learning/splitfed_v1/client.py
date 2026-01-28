@@ -10,7 +10,8 @@ import torch.optim as optim
 import time
 import zmq
 import torch
-from ..lib import convert, metrics
+from ..lib import convert
+from ..lib.metrics import Metrics
 from ..architectures import get_architecture_bundle
 from sys import getsizeof
 import numpy as np
@@ -54,12 +55,12 @@ class Runner:
         rnd = self.config['round']
 
         model_architecture = self.config.get("model_architecture", "ResNet18_CIFAR10")
-        arch = get_architecture_bundle(model_architectrue)
+        arch = get_architecture_bundle(model_architecture)
         logits = self.config.get("logits", 10)
 
         metrics = Metrics()
 
-        with metrics.initial_loading_timer()
+        with metrics.initial_loading_timer():
         
             #Initialize Logger
             if (self.config['logging']):
@@ -145,7 +146,7 @@ class Runner:
 
             #END INIT_TIMER
            
-        out = f"CLIENT_INITIAL_LOADING_TIME = {metrics.overall.initial_loading_total_time}"
+        out = f"CLIENT_INITIAL_LOADING_TIME = {metrics.overall.initial_loading_time}"
         print(out)
         logging.info(out)
 
@@ -167,7 +168,7 @@ class Runner:
                             print("GLOBAL_CLIENT_WEIGHTS_LOADED")
                             del global_numpy_weights
             
-                        logging.info(f"\n********ROUND {r}********\n")
+                        logging.info(f"********ROUND {r}********\n")
             
                         #connect to Split Server
                         context = zmq.Context()
@@ -205,7 +206,7 @@ class Runner:
                         #END ROUND_INIT_TIMER
     
                     for epoch in range(num_epochs):
-                        logging.info(f"\n********EPOCH {epoch}********\n")
+                        logging.info(f"********EPOCH {epoch}********\n")
         
                         with metrics.epoch_running_timer():
                             bar = tqdm(
@@ -226,7 +227,7 @@ class Runner:
                     
                                         ##dummy......
                                         names = socket.recv()
-                                        metrics.epoch.recv from split += len(names)
+                                        metrics.epoch.recv_from_split += len(names)
                     
                                         #forward prop and sending activations to server
                                         activations = client_model(inputs)
@@ -235,11 +236,11 @@ class Runner:
         
                                         with metrics.server_timer():
                                             socket.send(bytes_server_inputs)
-                                            metrics.epoch.sent to split. += len(bytes_server_inputs)
+                                            metrics.epoch.sent_to_split += len(bytes_server_inputs)
                     
                                             #recover gradient from server
                                             recv_grad = socket.recv()
-                                            metrics.epoch.recv from split. += len(recv_grad)
+                                            metrics.epoch.recv_from_split += len(recv_grad)
                                             #END SERVER_TIMER
         
                                         numpy_grad = convert.bytes_to_array(recv_grad)
@@ -252,12 +253,12 @@ class Runner:
                                         #END EPOCH_STEP_TIMER
                 
                                     bar.set_postfix({
-                                        "step_time": f"{total_one_step_time:.3f}",
-                                        "server_time": f"{server_work_time:.3f}"
+                                        "step_time": f"{metrics.last_step_time:.3f}",
+                                        "server_time": f"{metrics.last_server_work_time:.3f}"
                                     })
                                     logging.info(
-                                        f"CLIENT_TOTAL_ONE_STEP_TIME = {total_one_step_time:.3f}    , "
-                                        f"SERVER_WORK_TIME = {server_work_time:.3f}"
+                                        f"CLIENT_TOTAL_ONE_STEP_TIME = {metrics.last_step_time:.3f}    , "
+                                        f"SERVER_WORK_TIME = {metrics.last_server_work_time:.3f}"
                                     )
                                     #BATCH OVER
                                 #END_EPOCH_TRAIN_TIMER
@@ -317,7 +318,7 @@ class Runner:
                         metrics.round.recv_from_fed += len(names)
                         #END WEIGHTS_SENDING_TIMER
                     
-                    out = "SEND_WEIGHTS_COMMUNICATION_TIME = {:.3f}".format(metrics.round.send_weights_time))
+                    out = "SEND_WEIGHTS_COMMUNICATION_TIME = {:.3f}".format(metrics.round.send_weights_time)
                     print(out)
                     logging.info(out)
         
@@ -335,14 +336,26 @@ class Runner:
                     ====================================================
                     '''
         
-                    with metrics.weights_waiting_timer():
+                    with metrics.weights_receiving_timer():
                         global_weights = socket1.recv()
-                        metrics['round']['recv from fed'] += len(global_weights)
-                        #END WEIGHTS_RUNNING_TIMER
+                        metrics.round.recv_from_fed += len(global_weights)
+                        #END WEIGHTS_RECEIVING_TIMER
         
                     socket1.close()
                     context1.term()
                     #END ROUND_RUNNING_TIMER
+
+                print("Global weights recieved from fedServer")
+                print(
+                    "Size of global model weights (before) in bytes is:",
+                    getsizeof(global_weights),
+                )
+
+                global_numpy_weights = convert.bytes_to_dict(global_weights)
+                print(
+                    "Size of global model weights (after) in bytes is:",
+                    getsizeof(global_numpy_weights),
+                )
             
                 metrics.reportRound(r, logger)
                 #END ROUND

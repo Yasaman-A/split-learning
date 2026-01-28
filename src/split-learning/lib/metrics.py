@@ -33,10 +33,9 @@ ROUND_FIELDS = EPOCH_FIELDS + ROUND_EXTRA_FIELDS
 ALL_FIELDS = ROUND_FIELDS + OVERALL_EXTRA_FIELDS
 
 
-class MetricsBlock(fields):
-    __slots__ = fields
-
-    def __init__(self):
+class MetricsBlock:
+    def __init__(self, fields):
+        self.__slots__ = fields
         self.reset()
 
     def reset(self):
@@ -45,13 +44,13 @@ class MetricsBlock(fields):
 
     def add_from(self, other, fields):
         for field in fields:
-            setattr(self, field, get_attr(self, field) + getattr(other, field))
+            setattr(self, field, getattr(self, field) + getattr(other, field))
 
 class Metrics:
     def __init__(self):
-        self.overall = MetricsBlock()
-        self.round = MetricsBlock()
-        self.epoch = MetricsBlock()
+        self.overall = MetricsBlock(ALL_FIELDS)
+        self.round = MetricsBlock(ROUND_FIELDS)
+        self.epoch = MetricsBlock(EPOCH_FIELDS)
 
         #Time-keepers
         self.last_server_work_time = 0
@@ -61,7 +60,7 @@ class Metrics:
         self.round.add_from(self.epoch, EPOCH_FIELDS)
         self.epoch.reset()
 
-    def endRound(self):tra
+    def endRound(self):
         self.overall.add_from(self.round, ROUND_FIELDS)
         self.round.reset()
 
@@ -97,8 +96,8 @@ class Metrics:
         finally:
             elapsed = time.perf_counter() - start
             self.epoch.running_time = elapsed
-            self.endEpoch()
-
+    
+    @contextmanager
     def epoch_training_timer(self):
         start = time.perf_counter()
         try:
@@ -106,6 +105,7 @@ class Metrics:
         finally:
             elapsed = time.perf_counter() - start
             self.epoch.training_time = elapsed
+            self.overall.total_training_time += elapsed
 
     @contextmanager
     def round_running_timer(self):
@@ -116,6 +116,7 @@ class Metrics:
             elapsed = time.perf_counter() - start
             self.round.running_time = elapsed
 
+    @contextmanager
     def overall_running_timer(self):
         start = time.perf_counter()
         try:
@@ -166,31 +167,33 @@ class Metrics:
     # Reporting
     ###########################################################################
     
-    def reportEpoch(self, round_ epoch, log=None):
+    def reportEpoch(self, round_, epoch, log=None):
         metric = self.epoch
         out = (
-            f"========= Client R{round_} E{epoch} Statistics ==========\n"
+            f"\n========= Client R{round_} E{epoch} Statistics ==========\n"
             f"Time statistics:\n"
-            f"  Running time  : {m.running_time:.4f}\n"
-            f"  Training time : {m.training_time:.4f}\n"
+            f"  Running time  : {metric.running_time:.4f}\n"
+            f"  Training time : {metric.training_time:.4f}\n"
             f"Training networking statistics:\n"
-            f"  Sent to split : {m.sent_to_split}\n"
-            f"  Recv from split: {m.recv_from_split}\n"
-            f"=================================="
+            f"  Sent to split : {metric.sent_to_split}\n"
+            f"  Recv from split: {metric.recv_from_split}\n"
+            f"========================================================="
         )
         print(out)
         if log:
             log.info(out)
 
+        self.endEpoch()
+
 
     def reportRound(self, round_, log=None):
-        metric = self.round_
+        metric = self.round
         total_sent = metric.sent_to_split + metric.sent_to_fed
-        total_recv = metric.recv_from_split + recv_from_fed
+        total_recv = metric.recv_from_split + metric.recv_from_fed
         total_transmitted = total_sent + total_recv
 
         out = (
-            f"======== Round {r} Summary ========\n"
+            f"\n============== Round {round_} Summary ==============\n"
             f"Time statistics:\n"
             f"Running time: {metric.running_time:.4f}\n"
             f"Training time: {metric.training_time:.4f}\n"
@@ -208,20 +211,22 @@ class Metrics:
         )
         if log:
             log.info(out)
+
+        self.endRound()
     
     def reportOverall(self, log=None):
-        metric = self.metric
+        metric = self.overall
         total_sent = metric.sent_to_split + metric.sent_to_fed
-        total_recv = metric.recv_from_split + metric_recv_from_fed
+        total_recv = metric.recv_from_split + metric.recv_from_fed
         total_transmitted = total_sent + total_recv
 
 
         out = (
-            f"======== Global Summary ========\n"
+            f"\n======== Global Summary ========\n"
             f"Time statistics:\n"
             f"Running time: {metric.running_time:.4f}\n"
             f"Initial loading time: {getattr(metric, 'initial_loading_time', 0):.4f}\n"
-            f"Round init time: {getattr(metric, 'round_init_time', 0):.4f}\n"
+            f"Total round init time: {getattr(metric, 'total_round_init_time', 0):.4f}\n"
             f"Total training time: {getattr(metric, 'total_training_time', 0):.4f}\n"
             f"Server work time: {metric.server_work_time:.4f}\n"
             f"Fed wait time: {metric.fed_wait_time:.4f}\n"
@@ -233,9 +238,8 @@ class Metrics:
             f"Data received from Fed Server: {metric.recv_from_fed} bytes\n"
             f"Total received: {total_recv} bytes\n"
             f"Total transmitted: {total_transmitted} bytes\n"
-            f"Model statistics:\n"
         )
 
-    print(out)
-    if log:
-        log.info(out)
+        print(out)
+        if log:
+            log.info(out)
