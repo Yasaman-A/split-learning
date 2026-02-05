@@ -15,6 +15,7 @@ import pickle
 import zmq
 import torch
 from ..lib import convert
+from ..lib.transformed_dataset import TransformedDataset
 from ..lib.metrics import Metrics
 from ..architectures import get_architecture_bundle
 from sys import getsizeof
@@ -24,21 +25,6 @@ import os
 import yaml
 import logging
 from tqdm.auto import tqdm
-
-
-class TransformedDataset(torch.utils.data.Dataset):
-    def __init__(self, data, transform=None):
-        self.data = data
-        self.transform = transform
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx):
-        image, label = self.data[idx]
-        if self.transform:
-            image = self.transform(image)
-        return image, label
 
 
 class Runner:

@@ -2,6 +2,8 @@ logging: true
 #mute server step updates in terminal (useful if using docker)
 muted: true
 
+model_architecture: "efficientnet_dermamnist"
+
 log_dir: "./logs"
 model_dir: "./models"
 log_steps: 50
