@@ -17,6 +17,6 @@ def get(name):
         print(
             f"Error: Model Architecture {key} not included in registry. Did you define the model correctly?"
         )
-        print(f"Registry contains: {REGISTRY}")
+        print(f"Registry contains: {REGISTRY.keys()}")
         sys.exit("Exiting due to unknown architecture")
     return REGISTRY[key]()

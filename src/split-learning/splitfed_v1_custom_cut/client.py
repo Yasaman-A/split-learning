@@ -49,6 +49,7 @@ class Runner:
         num_epochs = int(self.config["epoch"])
         output_file = self.config["data_server"]["output_file"]
         rnd = self.config["round"]
+        test_last_model = self.config.get("test_last_model", False)
 
         # Load architecture
         model_architecture = self.config.get("model_architecture", "ResNet18_CIFAR10")
@@ -86,6 +87,7 @@ class Runner:
     
             # Data Preparation
             transformer = arch.training_transformer
+            transformer_eval = arch.eval_transformer
             batch_size = self.config["batch_size"]
     
             # Data Splitting
@@ -96,6 +98,11 @@ class Runner:
                     )
                     sampler = None
                     shuffle = True
+
+                    if test_last_model:
+                        testset = torchvision.datasets.CIFAR10(root='./data', train=False,
+                                    download=True, transform=transformer_eval)
+
     
                 case "s":  # Use pre-defined split data
                     if os.path.exists(output_file + str(self.client_id)):
@@ -114,7 +121,25 @@ class Runner:
                     trainset = TransformedDataset(dataset, transformer)
                     sampler = None
                     shuffle = True
-    
+
+                    if test_last_model:
+                        test_file = output_file.replace('.pkl', '_test.pkl')
+                        test_file_tmp = f"tmp_{self.client_id}_{test_file}"
+
+                        if os.path.exists(test_file_tmp):
+                            os.remove(test_file_tmp)
+                        print(f"{self.config['data_server']['server_address']}/{test_file}")
+
+                        urllib.request.urlretrieve(
+                            f"{self.config['data_server']['server_address']}/{test_file}",
+                            test_file_tmp
+                            )
+
+                        with open(test_file_tmp, 'rb') as handle:
+                            testset = pickle.load(handle)
+
+                        testset = TransformedDataset(testset, transformer_eval)
+            
                 case "_":  # Split into 'split_type' number of blocks.
                     trainset = torchvision.datasets.CIFAR10(
                         root="./data", train=True, download=True, transform=transformer
@@ -130,6 +155,10 @@ class Runner:
     
                     sampler = torch.utils.data.SubsetRandomSampler(use_indices)
                     shuffle = False
+
+                    if test_last_model:
+                        testset = torchvision.datasets.CIFAR10(root='./data', train=False,
+                                    download=True, transform=transformer_eval)
    
             trainloader = torch.utils.data.DataLoader(
                 trainset,
@@ -140,6 +169,15 @@ class Runner:
                 drop_last=True,
                 persistent_workers=True,
             )
+
+            if test_last_model:
+                test_loader = torch.utils.data.DataLoader(testset,
+                                                    batch_size=batch_size,
+                                                    shuffle=False,
+                                                    num_workers=0,
+                                                    drop_last=True,
+                                                    persistent_workers=False
+                )
     
             datasetsize_used = len(trainloader.dataset)
     
@@ -186,6 +224,8 @@ class Runner:
                         if term:
                             print("Terminate recieved.")
                             logging.info("Terminate recieved.")
+                            if test_last_model:
+                                test_client(device, client_model, socket, test_loader)
                             socket.close()
                             context.term()
                             break
@@ -272,7 +312,10 @@ class Runner:
                         
                         metrics.reportEpoch(r, epoch, logger)
                         # EPOCH OVER
-        
+
+                    if test_last_model and (r == num_rounds - 1):
+                        test_client(device, client_model, socket, test_loader)
+
                     socket.close()
                     context.term()
         
@@ -370,6 +413,49 @@ class Runner:
                 
                 metrics.reportRound(r, logger)
                 # END ROUND
+
+            #Test last set of client accuracies against the test set
             #END OVERALL_RUNNING_TIMER
 
         metrics.reportOverall(logger)
+
+
+
+
+
+def test_client(device, client_model, socket, test_loader):
+    bar = tqdm(test_loader, desc=f"testset: ", unit='', ascii=True,
+               bar_format='{desc} {n_fmt}/{total_fmt} {percentage:3.0f}%|{bar}| {postfix}')
+    client_model.eval()
+
+    socket.send(str(len(test_loader)).encode())
+    socket.recv()
+
+    with torch.no_grad():
+        for data in bar:
+            inputs, labels = data[0].to(device), data[1].to(device)
+
+            #send labels to server
+            bytes_labels = convert.array_to_bytes(labels.cpu())
+            socket.send(bytes_labels)
+
+            ##dummy......
+            names = socket.recv()
+
+            #forward prop and sending activations to server
+            activations = client_model(inputs)
+            server_inputs = activations.detach().clone()
+            bytes_server_inputs = convert.array_to_bytes(server_inputs.cpu())
+
+            socket.send(bytes_server_inputs)
+
+            socket.recv()
+
+    socket.send("acc".encode())
+    accuracy = float(socket.recv().decode())
+
+    out = f"Final client model accuracy on test set: {accuracy}"
+    print(out)
+    logging.info(out)
+
+    client_model.train()

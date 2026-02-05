@@ -55,6 +55,7 @@ class Runner:
         rnd = self.config["round"]
         muted = bool(self.config.get("muted", False))
         print(f"muted set to: {muted}")
+        test_last_model = self.config.get("test_last_model", False)
 
         # Load architecture
         model_architecture = self.config.get("model_architecture", "ResNet18_CIFAR10")
@@ -99,14 +100,6 @@ class Runner:
 
             socket.bind(url)
 
-            socket.recv()
-            if self.terminate:
-                socket.send(b"1")
-                socket.close()
-                return
-            else:
-                socket.send(b"0")
-
             model_config = {"cut_layer": cut_layer, "logits": logits}
             server_model = arch.server(model_config).to(device)
 
@@ -119,6 +112,16 @@ class Runner:
             if r > 0:
                 server_model.load_state_dict(server_global_weights)
                 print("GLOBAL_SERVER_WEIGHTS_LOADED")
+
+            socket.recv()
+            if self.terminate:
+                socket.send(b"1")
+                if test_last_model:
+                    test_client(device, server_model, socket, thread_no)
+                socket.close()
+                return
+            else:
+                socket.send(b"0")
 
             iterations = socket.recv()
             recv_iterations = int(iterations.decode())
@@ -193,51 +196,7 @@ class Runner:
                         f"***TH - {thread_no}***  SERVER_TOTAL_ONE_STEP_TIME = {total_one_step_time:.3f}, loss: {loss.item():.3f}"
                     )
 
-                ################################################################################
-                # TEST SET
 
-                # server_model.eval()
-
-                # correct = 0
-                # total = 0
-
-                # with torch.no_grad():
-                #     for j in range(test_iters):
-                #         #receive labels
-                #         recv_labels = socket.recv()
-                #         numpy_labels = convert.bytes_to_array(recv_labels)
-                #         labels = torch.from_numpy(numpy_labels)
-                #         labels = labels.to(device)
-
-                #         ##dummy......
-                #         socket.send(send_msg)
-
-                #         #get client activations
-                #         recv_serv_inputs = socket.recv()
-                #         numpy_server_inputs = convert.bytes_to_array(recv_serv_inputs)
-                #         server_inputs = torch.from_numpy(numpy_server_inputs)
-                #         server_inputs = server_inputs.to(device)
-
-                #         #dummy
-                #         socket.send(send_msg)
-
-                #         #forward pass
-                #         server_inputs = Variable(server_inputs, requires_grad=True)
-                #         outputs = server_model(server_inputs)
-
-                #         _, predicted = torch.max(outputs.data, 1)
-                #         correct += (predicted == labels).sum().item()
-                #         total += labels.size(0)
-
-                #     accuracy = 100 * correct / total if total > 0 else 0
-
-                #     socket.recv()
-                #     socket.send(str(accuracy).encode())
-                #     print(f" ***TH - {thread_no}*** Accuracy on test set for round {r} epoch {epoch}: {accuracy}%")
-                #     logging.info(f"***TH - {thread_no}*** Accuracy on test set for round {r} epoch {epoch}: {accuracy}%")
-                #     server_model.train()
-
-                ################################################################################
 
                 epoch_end_time = time.perf_counter()
                 total_one_epoch_time = epoch_end_time - epoch_start_time
@@ -250,6 +209,10 @@ class Runner:
 
                 ##################################################################################################################
 
+
+            if (test_last_model and r == rnd - 1):
+                test_client(device, server_model, socket, thread_no)
+         
             round_end_time = time.perf_counter()
             round_time = round_end_time - round_start_time
             print(
@@ -628,3 +591,53 @@ class Runner:
             context.term()
 
         main()
+
+
+
+
+
+def test_client(device, server_model, socket, thread_no):
+    server_model.eval()
+
+    correct = 0
+    total = 0
+
+    test_iters = int(socket.recv().decode())
+    socket.send(b"a")
+
+
+    with torch.no_grad():
+        for j in range(test_iters):
+            #receive labels
+            recv_labels = socket.recv()
+            numpy_labels = convert.bytes_to_array(recv_labels)
+            labels = torch.from_numpy(numpy_labels)
+            labels = labels.to(device)
+
+            ##dummy......
+            socket.send(b"a")
+
+            #get client activations
+            recv_serv_inputs = socket.recv()
+            numpy_server_inputs = convert.bytes_to_array(recv_serv_inputs)
+            server_inputs = torch.from_numpy(numpy_server_inputs)
+            server_inputs = server_inputs.to(device)
+
+            #dummy
+            socket.send(b"a")
+
+            #forward pass
+            server_inputs = Variable(server_inputs, requires_grad=True)
+            outputs = server_model(server_inputs)
+
+            _, predicted = torch.max(outputs.data, 1)
+            correct += (predicted == labels).sum().item()
+            total += labels.size(0)
+
+        accuracy = 100 * correct / total if total > 0 else 0
+
+        socket.recv()
+        socket.send(str(accuracy).encode())
+        print(f" ***TH - {thread_no}*** Accuracy on test set: {accuracy}%")
+        logging.info(f"***TH - {thread_no}*** Accuracy on test set: {accuracy}%")
+        server_model.train()

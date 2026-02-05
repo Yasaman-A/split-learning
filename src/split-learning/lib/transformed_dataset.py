@@ -1,3 +1,5 @@
+import torch
+
 class TransformedDataset(torch.utils.data.Dataset):
     def __init__(self, data, transform=None):
         self.data = data

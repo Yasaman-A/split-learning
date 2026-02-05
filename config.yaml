@@ -2,7 +2,7 @@ logging: true
 #mute server step updates in terminal (useful if using docker)
 muted: true
 
-model_architecture: "efficientnet_dermamnist"
+model_architecture: "resnet18_cifar10"
 
 log_dir: "./logs"
 model_dir: "./models"
@@ -11,9 +11,10 @@ log_steps: 50
 #cpu OR gpu
 device: gpu
 client_total: 5
-epoch: 5
-round: 3
+epoch: 1
+round: 2
 batch_size: 32
+test_last_model: True
 
 patience: 0
 cut_layer: 4

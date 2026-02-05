@@ -1,6 +1,7 @@
 services:
   fed:
-    image: split_learning
+    image: split-learning
+    network_mode: host
     runtime: nvidia
     gpus: all
     command: python -m split-learning --mode splitfed_v2_custom_cut --fed --config config.yaml
@@ -11,7 +12,8 @@ services:
       - ./config.yaml:/src/config.yaml
 
   split:
-    image: split_learning
+    image: split-learning
+    network_mode: host
     runtime: nvidia
     gpus: all
     command: python -m split-learning --mode splitfed_v2_custom_cut --server --config config.yaml
@@ -22,7 +24,8 @@ services:
       - ./config.yaml:/src/config.yaml
 
   client1:
-    image: split_learning
+    image: split-learning
+    network_mode: host
     cpus: 2
     mem_limit: 2g
     runtime: nvidia
@@ -35,7 +38,8 @@ services:
       - ./config.yaml:/src/config.yaml
 
   client2:
-    image: split_learning
+    image: split-learning
+    network_mode: host
     cpus: 2
     mem_limit: 2g
     runtime: nvidia
@@ -48,7 +52,8 @@ services:
       - ./config.yaml:/src/config.yaml
 
   client3:
-    image: split_learning
+    image: split-learning
+    network_mode: host
     cpus: 2
     mem_limit: 2g
     runtime: nvidia
@@ -62,7 +67,8 @@ services:
 
 
   client4:
-    image: split_learning
+    image: split-learning
+    network_mode: host
     cpus: 2
     mem_limit: 2g
     runtime: nvidia
@@ -76,7 +82,8 @@ services:
 
 
   client5:
-    image: split_learning
+    image: split-learning
+    network_mode: host
     cpus: 2
     mem_limit: 2g
     runtime: nvidia
