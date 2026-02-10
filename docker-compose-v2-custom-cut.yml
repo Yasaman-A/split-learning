@@ -4,7 +4,7 @@ services:
     network_mode: host
     runtime: nvidia
     gpus: all
-    command: python -m split-learning --mode splitfed_v2 --fed --config config.yaml
+    command: python -m split-learning --mode splitfed_v2_custom_cut --fed --config config.yaml
     working_dir: /src
     volumes:
       - ./logs:/src/logs
@@ -16,7 +16,7 @@ services:
     network_mode: host
     runtime: nvidia
     gpus: all
-    command: python -m split-learning --mode splitfed_v2 --server --config config.yaml
+    command: python -m split-learning --mode splitfed_v2_custom_cut --server --config config.yaml
     working_dir: /src
     volumes:
       - ./logs:/src/logs
@@ -30,7 +30,7 @@ services:
     mem_limit: 2g
     runtime: nvidia
     gpus: all
-    command: python -m split-learning --mode splitfed_v2 --client 1 --config config.yaml
+    command: python -m split-learning --mode splitfed_v2_custom_cut --client 1 --extra 4 --config config.yaml
     working_dir: /src
     volumes:
       - ./logs:/src/logs
@@ -44,7 +44,7 @@ services:
     mem_limit: 2g
     runtime: nvidia
     gpus: all
-    command: python -m split-learning --mode splitfed_v2 --client 2 --config config.yaml
+    command: python -m split-learning --mode splitfed_v2_custom_cut --client 2 --extra 4 --config config.yaml
     working_dir: /src
     volumes:
       - ./logs:/src/logs
@@ -58,7 +58,7 @@ services:
     mem_limit: 2g
     runtime: nvidia
     gpus: all
-    command: python -m split-learning --mode splitfed_v2 --client 3 --config config.yaml
+    command: python -m split-learning --mode splitfed_v2_custom_cut --client 3 --extra 4 --config config.yaml
     working_dir: /src
     volumes:
       - ./logs:/src/logs
@@ -73,7 +73,7 @@ services:
     mem_limit: 2g
     runtime: nvidia
     gpus: all
-    command: python -m split-learning --mode splitfed_v2 --client 4 --config config.yaml
+    command: python -m split-learning --mode splitfed_v2_custom_cut --client 4 --extra 4 --config config.yaml
     working_dir: /src
     volumes:
       - ./logs:/src/logs
@@ -88,7 +88,7 @@ services:
     mem_limit: 2g
     runtime: nvidia
     gpus: all
-    command: python -m split-learning --mode splitfed_v2 --client 5 --config config.yaml
+    command: python -m split-learning --mode splitfed_v2_custom_cut --client 5 --extra 4 --config config.yaml
     working_dir: /src
     volumes:
       - ./logs:/src/logs

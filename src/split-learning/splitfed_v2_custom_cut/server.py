@@ -13,12 +13,12 @@ import time
 import zmq
 import torch
 from ..lib import convert
+from ..architectures import get_architecture_bundle
 import os
 import random
 import yaml
 import logging
 # from objsize import get_deep_size
-
 
 
 class Runner:
@@ -35,6 +35,7 @@ class Runner:
         device = self.config['device']
         epochs = self.config['epoch']
         rnd = self.config['round']
+        self.cut_layer = self.config['test_cut_layer']
 
         if(device != 'cpu'):
                 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -64,34 +65,10 @@ class Runner:
         def main():
             """ server routine """
 
-            class ResNet18Server(nn.Module):
-                """docstring for ResNet"""
-
-                def __init__(self, config):
-                    super(ResNet18Server, self).__init__()
-                    self.logits = config['logits']
-                    self.cut_layer = config['cut_layer']
-
-                    self.model = models.resnet18(weights=None)
-
-                    num_ftrs = self.model.fc.in_features
-                    self.model.fc = nn.Sequential(nn.Flatten(),
-                                                  nn.Linear(num_ftrs, self.logits))
-
-                    self.layers = list(self.model.children())
-
-                def forward(self, x):
-                    for i, l in enumerate(self.layers):
-                        if i <= cut_layer:
-                            continue
-                        x = l(x)
-                    return x
-                
-                def change_cut(self, cut_layer):
-                    self.cut_layer = cut_layer
-
-            config = {"cut_layer": 1, "logits": 10}
-            server_model = ResNet18Server(config).to(device)
+            model_architecture = self.config.get("model_architecture", "ResNet18_CIFAR10")
+            arch = get_architecture_bundle(model_architecture)
+            model_config = {"cut_layer": self.cut_layer, "logits": self.config.get("logits", 10)}
+            server_model = arch.server(model_config).to(device)
 
             criterion = nn.CrossEntropyLoss()
             server_optimizer = optim.SGD(
@@ -117,30 +94,39 @@ class Runner:
                 socket.bind(url)
                 sockets.append(socket)
 
+            best_accuracy = 0
+            best_model = ""
+            patience = 0
+
             training_start_time = time.perf_counter()
             for r in range(num_rounds):
                 print("New round started..")
-
                 for epoch in range(num_epochs):
-                
                     random.shuffle(sockets)
-                    # print("NEW_SHUFFLED_CLIENTS_FOR_THIS_EPOCH --> {}".format(connection_url))
-                    # logging.info("NEW_SHUFFLED_CLIENTS_FOR_THIS_EPOCH --> {}".format(connection_url))
                     for cl in range(client_total):
                         client_no = cl + 1
 
                         """ Worker routine """
                         #use socket for random client n
                         socket = sockets[cl]
+                        if epoch == 0:
+                            socket.recv()
+                            if self.terminate:
+                                socket.send(b"1")
+                                # if test_last_model:
+                                #     test_client(device, server_model, socket, thread_no)
+                                socket.close()
+                                continue
+                            else:
+                                socket.send(b"0")
 
                         cut_layer = int(socket.recv().decode())
                         print(cut_layer)
                         server_model.change_cut(cut_layer)
-                        
-                        if self.terminate:
-                            socket.send(b"1")
-                            continue
-                        else: socket.send(b"0")
+
+                        msg = "give_datasize_length"
+                        send_msg = msg.encode()
+                        socket.send(send_msg)
 
                         iterations = socket.recv()
                         recv_iterations = int(iterations.decode())
@@ -253,7 +239,7 @@ class Runner:
                 fed_socket.send(b"a")
                 
                 config = {"cut_layer": self.config['test_cut_layer'], "logits": 10}
-                fed_model = ResNet18Server(config).to(device)
+                fed_model = arch.server(config).to(device)
                 fed_model.load_state_dict(server_model.state_dict())
 
                 correct = 0
@@ -348,7 +334,7 @@ class Runner:
                 fed_socket.send(b"a")
                 
                 config = {"cut_layer": self.config['test_cut_layer'], "logits": 10}
-                fed_model = ResNet18Server(config).to(device)
+                fed_model = arch.server(config).to(device)
                 fed_model.load_state_dict(server_model.state_dict())
 
                 correct = 0

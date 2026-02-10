@@ -83,6 +83,9 @@ class ResNet18Server(nn.Module):
     def classify(self, x):
         return nn.functional.softmax(self.forward(x))
 
+    def change_cut(self, cut_layer):
+        self.cut_layer = cut_layer
+
 
 # MNIST transforms: grayscale, normalize with MNIST statistics
 # MNIST mean=0.1307, std=0.3081

@@ -139,7 +139,6 @@ class Runner:
 
             # client_optimizer = optim.Adam(client_model.parameters(), lr=0.001)
 
-            training_start_time = time.time()
             num_rounds = rnd
 
             #END INIT_TIMER
@@ -154,8 +153,11 @@ class Runner:
         ====================================================
         '''
 
+        term = False
+
         with metrics.overall_running_timer():
             for r in range(num_rounds):
+                if term: break
                 with metrics.round_running_timer():
                     with metrics.round_init_timer():
                         if r > 0:
@@ -163,15 +165,6 @@ class Runner:
                             print("GLOBAL_CLIENT_WEIGHTS_LOADED")
                             logging.info("GLOBAL CLIENT WEIGHTS LOADED")
                             del global_numpy_weights
-
-                            socket.send(b"term?")
-                            term = bool(int(socket.recv().decode()))
-                            if term: 
-                                print("Terminate recieved.")
-                                logging.info("Terminate recieved.")
-                                socket.close()
-                                context.term()
-                                break
 
                     for epoch in range(num_epochs):
                         with metrics.epoch_running_timer():
@@ -182,31 +175,40 @@ class Runner:
                             url = split_address + ":" + str(split_port)
                             socket.connect(url)
 
+                            if epoch == 0:
+                                socket.send(b"term?")
+                                term = bool(int(socket.recv().decode()))
+                                if term: 
+                                    print("Terminate recieved.")
+                                    logging.info("Terminate recieved.")
+                                    socket.close()
+                                    context.term()
+                                    break
 
                             # send cut layer of this model
                             send_cut_layer = str(config["cut_layer"]).encode()
                             socket.send(send_cut_layer)
-                            metrics.round.sent_to_split += len(send_cut_layer)
+                            metrics.epoch.sent_to_split += len(send_cut_layer)
 
                             dummy = socket.recv()
-                            metrics.round.recv_from_split += len(dummy)
+                            metrics.epoch.recv_from_split += len(dummy)
 
                             iterations = len(trainloader)
                             print(iterations)
                             send_iterations = str(iterations).encode()
                             socket.send(send_iterations)
-                            metrics.round.sent_to_split += len(send_iterations)
+                            metrics.epoch.sent_to_split += len(send_iterations)
 
                             dummy = socket.recv()
-                            metrics.round.recv_from_split += len(dummy)
+                            metrics.epoch.recv_from_split += len(dummy)
                             
                             print(datasetsize_used)
                             send_dataset_size = str(datasetsize_used).encode()
                             socket.send(send_dataset_size)
-                            metrics.round.sent_to_split += len(send_dataset_size)
+                            metrics.epoch.sent_to_split += len(send_dataset_size)
 
                             dummy = socket.recv()
-                            metrics.round.recv_from_split += len(dummy)
+                            metrics.epoch.recv_from_split += len(dummy)
 
                             
                             
@@ -217,6 +219,7 @@ class Runner:
                                 ascii=True,
                                 bar_format="{desc} {n_fmt}/{total_fmt} {percentage:3.0f}%|{bar}| {postfix}",
                             )
+
                             with metrics.epoch_training_timer():
                                 for data in bar:
                                     with metrics.step_timer():
@@ -251,32 +254,26 @@ class Runner:
                                         activations.backward(gradient=grad_output)
                                         client_optimizer.step()
 
-                                        step_end_time = time.time()
-                                        total_one_step_time = step_end_time - step_start_time
-                                        server_work_time = server_work_time_end - server_work_time_start
+                                        #END STEP_TIMER
 
                                     bar.set_postfix(
                                         {
-                                            "step_time": f"{total_one_step_time:.3f}",
-                                            "server_time": f"{server_work_time:.3f}",
+                                            "step_time": f"{metrics.last_step_time:.3f}",
+                                            "server_time": f"{metrics.last_server_work_time:.3f}",
                                         }
                                     )
                                     logging.info(
-                                        f"CLIENT_TOTAL_ONE_STEP_TIME = {total_one_step_time:.3f}    , "
-                                        f"SERVER_WORK_TIME = {server_work_time:.3f}"
+                                        f"CLIENT_TOTAL_ONE_STEP_TIME = {metrics.last_step_time:.3f}    , "
+                                        f"SERVER_WORK_TIME = {metrics.last_server_work_time:.3f}"
                                     )
 
                                     # BATCH OVER
+                                #END EPOCH_TRAINING_TIMER
+                            #END EPOCH_RUNNING_TIMER
+                        metrics.reportEpoch(r, epoch, logger)
+                        socket.close()
+                        context.term()
 
-                            epoch_end_time = time.time()
-                            total_one_epoch_time = epoch_end_time - epoch_start_time
-                            print("CLIENT_TOTAL_ONE_EPOCH_TIME = ", total_one_epoch_time)
-                            logging.info(
-                                "CLIENT_TOTAL_ONE_EPOCH_TIME = {:.3f}".format(total_one_epoch_time)
-                            )
-
-                            socket.close()
-                            context.term()
 
                     ############################################################
                     ########### Sending model to fedServer #####################
@@ -298,14 +295,19 @@ class Runner:
                         "Size of model weights (after) in bytes is:", getsizeof(bytes_weights)
                     )
 
-                    socket1.send(bytes_weights)
-                    socket1.recv()
-
+                    with metrics.weights_sending_timer():
+                        socket1.send(bytes_weights)
+                        metrics.round.sent_to_fed += len(bytes_weights)
+                        dummy = socket1.recv()
+                        metrics.round.recv_from_fed += len(dummy)
                     ## send dataset size for weighted avg
                     socket1.send(send_dataset_size)
+                    metrics.round.sent_to_fed += len(send_dataset_size)
 
-                    # recieve federated model
-                    global_weights = socket1.recv()
+                    with metrics.weights_receiving_timer():
+                        # recieve federated model
+                        global_weights = socket1.recv()
+                        metrics.round.recv_from_fed += len(global_weights)
 
                     print(
                         "Size of global model weights (before) in bytes is:",
@@ -319,9 +321,9 @@ class Runner:
 
                     socket1.close()
                     context1.term()
-
-                    metrics.reportRound(r, logger)
-                    # END ROUND
+                    # END ROUND_RUNNING_TIMER
+                metrics.reportRound(r, logger)
+                #END ROUND
             #END OVERALL_RUNNING_TIMER
 
         metrics.reportOverall(logger)

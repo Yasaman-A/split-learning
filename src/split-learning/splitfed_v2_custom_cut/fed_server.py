@@ -16,6 +16,8 @@ import time
 import zmq
 import torch
 from ..lib import convert
+from ..lib.transformed_dataset import TransformedDataset
+from ..architectures import get_architecture_bundle
 from sys import getsizeof
 import yaml
 import logging
@@ -26,22 +28,6 @@ from torchvision import transforms, models
 import torchvision.transforms as transforms
 import torch.nn as nn
 from tqdm.auto import tqdm
-
-
-class TransformedDataset(torch.utils.data.Dataset):
-    def __init__(self, data, transform=None):
-        self.data = data
-        self.transform = transform
-    
-    def __len__(self):
-        return len(self.data)
-    
-    def __getitem__(self, idx):
-        image, label = self.data[idx]
-        if self.transform:
-            image = self.transform(image)
-        return image, label
-
 
 
 class Runner:
@@ -90,13 +76,11 @@ class Runner:
         with open(test_file_tmp, 'rb') as handle:
             testset = pickle.load(handle)
 
+        model_architecture = self.config.get("model_architecture", "ResNet18_CIFAR10")
+        arch = get_architecture_bundle(model_architecture)
+        logits = self.config.get("logits", 10)
 
-        transformer = transforms.Compose([
-                transforms.ToTensor(),
-                transforms.Normalize((0.4914, 0.4822, 0.4465),
-                                        (0.2023, 0.1994, 0.2010))
-            ])
-        
+        transformer = arch.eval_transformer
         
         valset = TransformedDataset(valset, transform=transformer)
         testset = TransformedDataset(testset, transform=transformer)
@@ -114,29 +98,6 @@ class Runner:
                                     num_workers=0,
                                     persistent_workers=False
         )
-
-
-        class ResNet18Client(nn.Module):
-
-            def __init__(self, config):
-                super(ResNet18Client, self).__init__()
-                self.logits = config['logits']
-                self.cut_layer = cut_layer
-
-                self.model = models.resnet18(weights=None)
-
-                num_ftrs = self.model.fc.in_features
-                self.model.fc = nn.Sequential(nn.Flatten(),
-                                                  nn.Linear(num_ftrs, self.logits))
-                
-                self.layers = list(self.model.children())
-
-            def forward(self, x):
-                for i, l in enumerate(self.layers):
-                    if i > self.cut_layer:
-                        break
-                    x = l(x)
-                return x
 
         ##################################################################
 
@@ -161,7 +122,7 @@ class Runner:
             Returns the average of the weights.
             """
 
-            info = ResNet18Client({"cut_layer" : cut_layer_list[0], "logits": 10})
+            info = arch.client({"cut_layer" : self.config['cut_layer'], "logits": 10})
             
             weights_avg = copy.deepcopy(state_dicts[0])
             
@@ -257,6 +218,8 @@ class Runner:
             global datasetsize_client
             global cut_layer_list
 
+            
+
             client_weights = []
             datasetsize_client = []
             cut_layer_list = []
@@ -346,7 +309,7 @@ class Runner:
                 
 
                 config = {"cut_layer": int(self.config['test_cut_layer']), "logits": 10}
-                test_model = ResNet18Client(config).to(device)
+                test_model = arch.client(config).to(device)
                 test_model.load_state_dict(client_global_weights)
 
                 bar = tqdm(valloader, desc=f"valset: ", unit='', ascii=True,
@@ -386,7 +349,7 @@ class Runner:
                 serv_socket.recv()
 
                 config = {"cut_layer": int(self.config['test_cut_layer']), "logits": 10}
-                test_model = ResNet18Client(config).to(device)
+                test_model = arch.client(config).to(device)
                 test_model.load_state_dict(client_global_weights)
 
                 bar = tqdm(testloader, desc=f"testset: ", unit='', ascii=True,
