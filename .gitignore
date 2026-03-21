@@ -1,4 +1,5 @@
 split-learning.code-workspace
+logs/.run_id
 *.pickle*
 data/
 *.pt
