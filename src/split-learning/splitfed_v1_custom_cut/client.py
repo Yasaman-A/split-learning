@@ -24,8 +24,46 @@ import urllib.request
 import os
 import yaml
 import logging
+from datetime import datetime
 from tqdm.auto import tqdm
+class ShadesOfGray(object):
+    """
+    Implements Shades of Gray color constancy (Minkowski Norm p=6).
+    This normalizes lighting artifacts which are common in dermoscopy images.
+    """
+    def __init__(self, power=6):
+        self.power = power
 
+    def __call__(self, img):
+        # Ensure img is a tensor for calculation
+        if not isinstance(img, torch.Tensor):
+            t_img = transforms.functional.to_tensor(img)
+        else:
+            t_img = img
+            
+        # 1. Calculate the Minkowski norm (estimation of the illuminant)
+        # Flatten spatial dims: (C, H, W) -> (C, H*W)
+        c, h, w = t_img.shape
+        img_flat = t_img.view(c, -1)
+        
+        # Power p, mean, then root p
+        illum = img_flat.pow(self.power).mean(dim=1).pow(1.0/self.power)
+        
+        # 2. Normalize the image by the illuminant
+        # Shape handling for broadcasting (C, 1, 1)
+        illum = illum.view(c, 1, 1)
+        
+        # Avoid division by zero
+        normalized = t_img / (illum + 1e-8)
+        
+        # 3. Optional: Scale so the mean matches a standard gray (e.g., 0.5) 
+        # or clip to [0, 1]. For neural nets, standardizing the mean is usually enough.
+        # We clip to ensure validity.
+        normalized = torch.clamp(normalized, 0, 1)
+        
+        # If the input was a PIL image, we usually return a Tensor here anyway 
+        # because this transform sits in a chain.
+        return normalized
 
 class Runner:
     def __init__(self, config_path) -> None:
@@ -54,7 +92,8 @@ class Runner:
         # Load architecture
         model_architecture = self.config.get("model_architecture", "ResNet18_CIFAR10")
         arch = get_architecture_bundle(model_architecture)
-        logits = self.config.get("logits", 10)
+        logits = self.config.get("logits", 7)#10)
+        mu = float(self.config.get("fedprox_mu", 0.0))
 
         metrics = Metrics()
         
@@ -62,18 +101,39 @@ class Runner:
 
             # Initialize Logger
             if self.config["logging"]:
-                log_path = os.path.join(
-                    self.config.get("log_dir", "./"),
+                log_dir = self.config.get("log_dir", "./logs")
+                run_id_path = os.path.join(log_dir, ".run_id")
+                # Wait up to 30s for server.py to write .run_id
+                for _ in range(30):
+                    if os.path.exists(run_id_path):
+                        break
+                    time.sleep(1)
+                if os.path.exists(run_id_path):
+                    with open(run_id_path) as f:
+                        run_tag = f.read().strip()
+                else:
+                    # Fallback if server.py never wrote .run_id
+                    loss_fn = self.config.get("loss_function", "CE")
+                    dataset = os.path.splitext(self.config["data_server"]["output_file"])[0]
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+                    run_tag = f"{model_architecture}_{loss_fn}_{dataset}_{timestamp}"
+
+                run_dir = os.path.join(log_dir, run_tag)
+                os.makedirs(run_dir, exist_ok=True)
+                new_log_path = os.path.join(run_dir, f"client_{self.client_id}.log")
+                old_log_path = os.path.join(
+                    log_dir,
                     f"{self.client_id}_{cut_layer}_"
                     f"{self.config['epoch']}_{self.config['round']}_"
                     f"{self.config['batch_size']}_{self.config['device']}.log",
                 )
-                logging.basicConfig(
-                    filename=log_path, format="%(asctime)s %(message)s", filemode="a"
-                )
+                formatter = logging.Formatter("%(asctime)s %(message)s")
                 logger = logging.getLogger()
-                # Setting the threshold of logger to DEBUG
                 logger.setLevel(logging.INFO)
+                for path, mode in [(new_log_path, "w"), (old_log_path, "a")]:
+                    h = logging.FileHandler(path, mode=mode)
+                    h.setFormatter(formatter)
+                    logger.addHandler(h)
     
             if self.config["device"] == "cpu":
                 device = "cpu"
@@ -89,7 +149,6 @@ class Runner:
             transformer = arch.training_transformer
             transformer_eval = arch.eval_transformer
             batch_size = self.config["batch_size"]
-    
             # Data Splitting
             match self.config["split_type"]:
                 case "n":  # No splitting. Use full dataset
@@ -107,17 +166,17 @@ class Runner:
                 case "s":  # Use pre-defined split data
                     if os.path.exists(output_file + str(self.client_id)):
                         os.remove(output_file + str(self.client_id))
-    
+
                     print(self.config["data_server"]["server_address"] + "/" + output_file)
                     urllib.request.urlretrieve(
                         self.config["data_server"]["server_address"] + "/" + output_file,
                         output_file + str(self.client_id),
                     )
-    
+
                     with open(output_file + str(self.client_id), "rb") as handle:
                         datasets = pickle.load(handle)
                         dataset = datasets[self.client_id - 1]
-    
+
                     trainset = TransformedDataset(dataset, transformer)
                     sampler = None
                     shuffle = True
@@ -165,9 +224,9 @@ class Runner:
                 batch_size=batch_size,
                 shuffle=shuffle,
                 sampler=sampler,
-                num_workers=2,
+                num_workers=0,
                 drop_last=True,
-                persistent_workers=True,
+                persistent_workers=False,
             )
 
             if test_last_model:
@@ -184,9 +243,18 @@ class Runner:
             model_config = {"cut_layer": int(cut_layer), "logits": logits}
             client_model = arch.client(model_config).to(device)
     
-            client_optimizer = optim.SGD(client_model.parameters(), lr=0.01, momentum=0.9)
-    
+            client_optimizer = optim.SGD(
+                client_model.parameters(),
+                lr=0.01,
+                momentum=0.9,
+            )
+            # client_scheduler = optim.lr_scheduler.StepLR(
+            #     client_optimizer, step_size=15, gamma=0.1
+            # )
+
             num_rounds = rnd
+    
+        
             
             #END INIT_TIMER
    
@@ -216,6 +284,7 @@ class Runner:
                         context = zmq.Context()
                         print("Connecting to server…")
                         socket = context.socket(zmq.REQ)
+                        socket.setsockopt(zmq.LINGER, 0)
                         url = split_address + ":" + str(split_port)
                         socket.connect(url)
             
@@ -248,7 +317,10 @@ class Runner:
                         metrics.round.recv_from_split += len(names)
             
                         #END ROUND_INIT_TIMER
-        
+
+                    # FedProx: snapshot weights at round start for proximal term
+                    w0_client = {n: p.data.clone() for n, p in client_model.named_parameters()} if (mu > 0 and r > 0) else None
+
                     for epoch in range(num_epochs):
                         logging.info(f"********EPOCH {epoch}********\n")
                         
@@ -293,6 +365,10 @@ class Runner:
                     
                                         client_optimizer.zero_grad()
                                         activations.backward(gradient=grad_output)
+                                        if w0_client is not None:
+                                            for n, p in client_model.named_parameters():
+                                                if p.grad is not None:
+                                                    p.grad.data.add_(mu * (p.data - w0_client[n]))
                                         client_optimizer.step()
                                         #END EPOCH_STEP_TIMER
                 
@@ -319,14 +395,14 @@ class Runner:
                     socket.close()
                     context.term()
         
-                    model_save_name = os.path.join(
-                        self.config.get("model_dir", "./"),
-                        f"cc_client_thread_model_r{r}_{self.client_id}_{split_port}_"
-                        f"{self.config['device']}_{cut_layer}_{self.config['epoch']}_"
-                        f"{self.config['split_type']}_{self.client_id}_{self.config['batch_size']}_"
-                        f"{self.config['round']}_{fed_port}.pt",
-                    )
-                    torch.save(client_model.state_dict(), model_save_name)
+                    # model_save_name = os.path.join(
+                    #     self.config.get("model_dir", "./"),
+                    #     f"cc_client_thread_model_r{r}_{self.client_id}_{split_port}_"
+                    #     f"{self.config['device']}_{cut_layer}_{self.config['epoch']}_"
+                    #     f"{self.config['split_type']}_{self.client_id}_{self.config['batch_size']}_"
+                    #     f"{self.config['round']}_{fed_port}.pt",
+                    # )
+                    # torch.save(client_model.state_dict(), model_save_name)
                     print("***TH - {}***  MODEL_SAVED.".format(self.client_id))
         
                     """
@@ -412,7 +488,9 @@ class Runner:
                 )
                 
                 metrics.reportRound(r, logger)
+                # client_scheduler.step()
                 # END ROUND
+                
 
             #Test last set of client accuracies against the test set
             #END OVERALL_RUNNING_TIMER

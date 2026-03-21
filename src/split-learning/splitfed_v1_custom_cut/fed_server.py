@@ -17,6 +17,7 @@ from sys import getsizeof
 from .custom_model_avg import custom_model_avg, combine_fed_avg_models
 import logging
 import os
+from datetime import datetime
 import urllib.request
 import pickle
 from torchvision import transforms, models
@@ -24,7 +25,29 @@ import torchvision.transforms as transforms
 import torch.nn as nn
 from tqdm.auto import tqdm
 
+# --- ADD THIS CLASS TO fed_server.py ---
+# --- ADD THIS TO fed_server.py (After imports) ---
+class ShadesOfGray(object):
+    """
+    Implements Shades of Gray color constancy (Minkowski Norm p=6).
+    """
+    def __init__(self, power=6):
+        self.power = power
 
+    def __call__(self, img):
+        if not isinstance(img, torch.Tensor):
+            t_img = transforms.functional.to_tensor(img)
+        else:
+            t_img = img
+            
+        c, h, w = t_img.shape
+        img_flat = t_img.view(c, -1)
+        illum = img_flat.pow(self.power).mean(dim=1).pow(1.0/self.power)
+        illum = illum.view(c, 1, 1)
+        normalized = t_img / (illum + 1e-8)
+        normalized = torch.clamp(normalized, 0, 1)
+        return normalized
+    
 class TransformedDataset(torch.utils.data.Dataset):
     def __init__(self, data, transform=None):
         self.data = data
@@ -114,18 +137,36 @@ class Runner:
         ##################################################################
 
         if self.config["logging"]:
-            log_path = os.path.join(
-                self.config.get("log_dir", "./"),
-                f"./cc_fed_server_{client_total}_{fed_port}_{rnd}.log",
+            log_dir = self.config.get("log_dir", "./logs")
+            run_id_path = os.path.join(log_dir, ".run_id")
+            # Wait up to 30s for server.py to write .run_id
+            for _ in range(30):
+                if os.path.exists(run_id_path):
+                    break
+                time.sleep(1)
+            if os.path.exists(run_id_path):
+                with open(run_id_path) as f:
+                    run_tag = f.read().strip()
+            else:
+                # Fallback if server.py never wrote .run_id
+                loss_fn = self.config.get("loss_function", "CE")
+                dataset = os.path.splitext(self.config["data_server"]["output_file"])[0]
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+                run_tag = f"{model_architecture}_{loss_fn}_{dataset}_{timestamp}"
+
+            run_dir = os.path.join(log_dir, run_tag)
+            os.makedirs(run_dir, exist_ok=True)
+            new_log_path = os.path.join(run_dir, "cc_fed_server.log")
+            old_log_path = os.path.join(
+                log_dir, f"cc_fed_server_{client_total}_{fed_port}_{rnd}.log"
             )
-            # Create and configure logger
-            logging.basicConfig(
-                filename=log_path, format="%(asctime)s %(message)s", filemode="a"
-            )
-            # Creating an object
+            formatter = logging.Formatter("%(asctime)s %(message)s")
             logger = logging.getLogger()
-            # Setting the threshold of logger to DEBUG
             logger.setLevel(logging.INFO)
+            for path, mode in [(new_log_path, "w"), (old_log_path, "a")]:
+                h = logging.FileHandler(path, mode=mode)
+                h.setFormatter(formatter)
+                logger.addHandler(h)
             logging.info(
                 "Parameters (FED_SERVER_LOG) ---------- [TOTAL_CLIENTS --> {}, STARTING_SERVER_PORT --> {}, ROUNDS --> {}] ---------- ".format(
                     str(client_total), str(fed_port), str(rnd)
@@ -159,6 +200,7 @@ class Runner:
             lock, barrier, event = sync_params
 
             socket = context.socket(zmq.REP)
+            socket.setsockopt(zmq.LINGER, 10000)  # wait up to 10s for global model delivery before closing
             socket.bind(url)
 
             print("Waiting for weights from client {}".format(thread_no))
@@ -322,6 +364,7 @@ class Runner:
                 serv_context = zmq.Context()
                 serv_url = f"tcp://*:{fed_port+client_total}"
                 serv_socket = serv_context.socket(zmq.REQ)
+                serv_socket.setsockopt(zmq.LINGER, 0)
                 serv_socket.bind(serv_url)
                 print(f"listening on {serv_url}")
 
