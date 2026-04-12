@@ -165,6 +165,7 @@ class Runner:
                             context = zmq.Context()
 
                             print("Connecting to server…")
+                            logging.info("Connecting to server...")
                             socket = context.socket(zmq.REQ)
                             url = split_address + ":"+ str(split_port)
                             socket.connect(url)
@@ -260,6 +261,8 @@ class Runner:
                     ############################################################
                     ########### Sending model to fedServer #####################
                     ############################################################
+
+                    if term: break
 
                     context1 = zmq.Context()
 
