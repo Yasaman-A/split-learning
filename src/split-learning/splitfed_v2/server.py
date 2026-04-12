@@ -169,11 +169,11 @@ class Runner:
                             with torch.no_grad():
                                 probs = torch.softmax(outputs, dim=1)
                                 avg_conf = probs.max(dim=1).values.mean().item()
-                                if avg_conf > 0.6:
-                                    print(f"[Round: {r}, Epoch: {epoch}] Avg softmax confidence: {avg_conf:.4f}")
-                                entropy = -(probs * probs.log()).sum(dim=1).mean().item()
-                                if entropy < 1:
-                                    print(f"[Round: {r}, Epoch {epoch}] Prediction entropy: {entropy:.4f}")
+                                #if avg_conf > 0.6:
+                                #    print(f"[Round: {r}, Epoch: {epoch}] Avg softmax confidence: {avg_conf:.4f}")
+                                #entropy = -(probs * probs.log()).sum(dim=1).mean().item()
+                                #if entropy < 1:
+                                #    print(f"[Round: {r}, Epoch {epoch}] Prediction entropy: {entropy:.4f}")
 
 
                             server_optimizer.zero_grad()

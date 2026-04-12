@@ -279,6 +279,8 @@ class Runner:
                     ########### Sending model to fedServer #####################
                     ############################################################
 
+                    if term: break
+
                     context1 = zmq.Context()
 
                     #  Socket to talk to server
