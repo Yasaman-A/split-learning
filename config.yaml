@@ -15,6 +15,7 @@ epoch: 1
 round: 3
 batch_size: 32
 test_last_model: True
+logits: 10
 
 patience: 0
 cut_layer: 4

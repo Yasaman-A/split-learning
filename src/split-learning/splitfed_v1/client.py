@@ -208,7 +208,7 @@ class Runner:
                     )
 
                     torch.save(client_model.state_dict(), model_save_name)
-                    print("***TH - {self.client_id}***  MODEL_SAVED.")
+                    print(f"***TH - {self.client_id}***  MODEL_SAVED.")
 
 
 

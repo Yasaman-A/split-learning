@@ -3,8 +3,8 @@ import os
 import pickle
 import urllib.request
 from torch.utils.data import DataLoader
-from transformed_dataset import TransformedDataset
-
+from .transformed_dataset import TransformedDataset
+from ..architectures.architecture_bundle import ArchitectureBundle
 class DataPrep:
     """ Downloads data from the Data Server and applies transformers.
         For downloading the training data, the first client is assumed by default
@@ -15,7 +15,7 @@ class DataPrep:
 
         self.batch_size = config['batch_size']
         self.data_server = config['data_server']
-        self.split_type = config.get['split_type']
+        self.split_type = config.get('split_type')
 
         self.client_id = client_id
 

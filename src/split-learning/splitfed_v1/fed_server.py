@@ -298,7 +298,7 @@ def eval_step(loader, serv_socket, arch, device, config, eval_type):
     serv_socket.recv()
 
     config = {"cut_layer": int(config["cut_layer"]), "logits": config['logits']}
-    test_model = arch(config).to(device)
+    test_model = arch.client(config).to(device)
     test_model.load_state_dict(client_global_weights)
 
     progress_bar = tqdm(
