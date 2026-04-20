@@ -5,11 +5,11 @@ arg2 --> CLIENT_ID
 import logging
 import os
 from sys import getsizeof
-import yaml
 
 from tqdm.auto import tqdm
 import torch
 from torch import optim
+import yaml
 import zmq
 
 from ..architectures import get_architecture_bundle
@@ -137,7 +137,7 @@ class Runner:
                         logging.info(f"********EPOCH {epoch}********\n")
 
                         with metrics.epoch_running_timer():
-                            loading_bar = tqdm(
+                            bar = tqdm(
                                 trainloader,
                                 desc=f"{r} {epoch}",
                                 unit='',
@@ -145,7 +145,7 @@ class Runner:
                                 bar_format='{desc} {n_fmt}/{total_fmt} {percentage:3.0f}%|{bar}| {postfix}'
                                 )
                             with metrics.epoch_training_timer():
-                                for data in loading_bar:
+                                for data in bar:
                                     with metrics.step_timer():
                                         inputs, labels = data[0].to(device), data[1].to(device)
 
@@ -180,7 +180,7 @@ class Runner:
                                         client_optimizer.step()
                                         #END EPOCH_STEP_TIMER
 
-                                    loading_bar.set_postfix({
+                                    bar.set_postfix({
                                         "step_time": f"{metrics.last_step_time:.3f}",
                                         "server_time": f"{metrics.last_server_work_time:.3f}"
                                     })

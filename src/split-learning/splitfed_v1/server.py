@@ -6,13 +6,13 @@ import logging
 import os
 import threading
 import time
-import yaml
-import zmq
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.autograd import Variable
+import yaml
+import zmq
 
 from ..architectures import get_architecture_bundle
 from ..lib import convert
@@ -306,7 +306,7 @@ class Runner:
 
                 #TEST SET - TRUE ACCURACY
 
-                eval_step(arch, fed_socket, device, self.config, "Testing", r)
+                eval_step(arch, fed_socket, device, self.config, "testing", r)
 
 
                 fed_socket.close()

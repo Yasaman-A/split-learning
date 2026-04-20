@@ -14,9 +14,9 @@ import threading
 import time
 from sys import getsizeof
 
-import zmq
 import torch
 import yaml
+import zmq
 from tqdm.auto import tqdm
 
 from ..architectures import get_architecture_bundle
@@ -36,7 +36,6 @@ class Runner:
         fed_port = self.config["fed_server"]["server_start_port"]
         rnd = self.config["round"]
 
-
         if self.config["device"] == "cpu":
             device = "cpu"
         else:
@@ -49,7 +48,7 @@ class Runner:
         if model_architecture is None:
             raise ValueError("Error: No model architecture specified")
         arch = get_architecture_bundle(model_architecture)
-        
+
         data_prepper = DataPrep(self.config, arch)
         valloader = data_prepper.get_eval_loader("validation")
         testloader = data_prepper.get_eval_loader("testing")
