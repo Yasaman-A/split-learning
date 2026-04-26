@@ -3,28 +3,22 @@ arg1 --> CONFIG_FILE_PATH
 arg2 --> CLIENT_ID
 arg3 --> CUT_LAYER
 """
-
 from locale import atoi
-import torchvision
-import torchvision.transforms as transforms
-import torch.nn as nn
-from torchvision import models
-import torch.optim as optim
-import time
-import zmq
-import torch
-from ..lib import convert
-from ..lib.transformed_dataset import TransformedDataset
-from ..lib.metrics import Metrics
-from ..architectures import get_architecture_bundle
-import os
-import urllib.request
-import pickle
-from sys import getsizeof
-import numpy as np
-import yaml
 import logging
+import os
+from sys import getsizeof
+
 from tqdm.auto import tqdm
+import yaml
+import zmq
+
+import torch
+import torch.optim as optim
+
+from ..architectures import get_architecture_bundle
+from ..lib import convert
+from ..lib.data_prep import DataPrep
+from ..lib.metrics import Metrics
 
 
 class Runner:
@@ -44,20 +38,17 @@ class Runner:
         split_port = self.config['split_server']['server_start_port']+self.client_id-1
         fed_port = self.config['fed_server']['server_start_port']+self.client_id-1
         num_epochs = int(self.config['epoch'])
-        output_file = self.config['data_server']['output_file']
         rnd = self.config['round']
         cut_layer = self.input_cut_layer
-        batch_size = self.config['batch_size']
 
         model_architecture = self.config.get("model_architecture", "ResNet18_CIFAR10")
         arch = get_architecture_bundle(model_architecture)
-        logits = self.config.get("logits", 10)
 
         metrics = Metrics()
 
         with metrics.initial_loading_timer():
 
-            if (self.config['logging']):
+            if self.config['logging']:
                 log_path = os.path.join(
                     self.config.get("log_dir", "./"),
                     f"{self.client_id}_{cut_layer}_"
@@ -73,80 +64,33 @@ class Runner:
                 # Setting the threshold of logger to DEBUG
                 logger.setLevel(logging.INFO)
 
-            if(self.config['device'] == 'cpu'):
+            if self.config['device'] == 'cpu':
                 device = 'cpu'
             else:
                 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
             print(device)
 
-            #Data Preparation
-
-            transformer = arch.training_transformer
-            batch_size = self.config['batch_size']
-
-            #Data Splitting
-            match self.config['split_type']:
-                case 'n': #No splitting. Use full dataset
-                    trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
-                                                        download=True, transform=transformer)
-                    sampler = None
-                    shuffle = True
-
-                case 's': #Use pre-defined split data
-                    if os.path.exists(output_file+str(self.client_id)):
-                        os.remove(output_file+str(self.client_id))
-
-                    print(self.config['data_server']['server_address']+"/"+output_file)
-                    urllib.request.urlretrieve(self.config['data_server']['server_address']+"/"+output_file, output_file+str(self.client_id))
-
-                    with open(output_file+str(self.client_id), 'rb') as handle:
-                        datasets = pickle.load(handle)
-                        dataset = datasets[self.client_id-1]
-
-                    trainset = TransformedDataset(dataset, transformer)
-                    sampler = None
-                    shuffle = True
-
-                case '_': #Split into 'split_type' number of blocks.
-                    trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
-                                                        download=True, transform=transformer)
-                    dataset_size = len(trainset)
-                    total_indices = list(range(dataset_size))
-                    list_of_indices = np.array_split(total_indices, int(self.config['split_type']))
-                    use_indices = list_of_indices[self.client_id]
-                    datasetsize_used = len(use_indices)
-                    print('use_indices:' + str(use_indices))
-
-                    sampler = torch.utils.data.SubsetRandomSampler(use_indices)
-                    shuffle=False
-
-
-            trainloader = torch.utils.data.DataLoader(trainset, 
-                                            batch_size=batch_size,
-                                            shuffle=shuffle,
-                                            sampler = sampler,
-                                            num_workers=2,
-                                            persistent_workers=True)
-            datasetsize_used = len(trainloader.dataset)
-
-
             config = {"cut_layer": int(cut_layer), "logits": 10}
             client_model = arch.client(config).to(device)
-
             client_optimizer = optim.SGD(
                 client_model.parameters(), lr=0.01, momentum=0.9)
-            
+
+            data_prepper = DataPrep(self.config, arch, self.client_id)
+            trainloader = data_prepper.get_training_loader()
+            datasetsize_used = len(trainloader)
+
             num_rounds = rnd
+
+            #END INIT_TIMER
 
         out = f"CLIENT_INITIAL_LOADING_TIME = {metrics.overall.initial_loading_time}"
         print(out)
         logging.info(out)
 
-        '''
-        ====================================================        
-        BEGIN TRAINING
-        ====================================================
-        '''
+        # ====================================================
+        # BEGIN TRAINING
+        # ====================================================
+
         term = False
 
         with metrics.overall_running_timer():
@@ -185,7 +129,7 @@ class Runner:
                             send_cut = str(config['cut_layer']).encode()
                             socket.send(send_cut)
                             metrics.epoch.sent_to_split += len(send_cut)
-                                
+
                             dummy = socket.recv()
                             metrics.epoch.recv_from_split += len(dummy)
 
@@ -193,7 +137,7 @@ class Runner:
                             send_iterations = str(iterations).encode()
                             socket.send(send_iterations)
                             metrics.epoch.sent_to_split += len(send_iterations)
-                            
+
 
                             dummy = socket.recv()
                             metrics.epoch.sent_to_split += len(dummy)
@@ -206,7 +150,7 @@ class Runner:
 
                             bar = tqdm(trainloader, desc=f"{r} {epoch}", unit='', ascii=True,
                                     bar_format='{desc} {n_fmt}/{total_fmt} {percentage:3.0f}%|{bar}| {postfix}')
-                            
+
                             with metrics.epoch_training_timer():
                                 for data in bar:
                                     with metrics.step_timer():
@@ -241,7 +185,7 @@ class Runner:
                                         client_optimizer.step()
                                         #END STEP_TIMER
 
-                                    
+
                                     bar.set_postfix({
                                             "step_time": f"{metrics.last_step_time:.3f}",
                                             "server_time": f"{metrics.last_server_work_time:.3f}",
@@ -279,15 +223,13 @@ class Runner:
 
                     logging.info('Size of model weights (before) in bytes is: %s', (getsizeof(weights)))
                     logging.info('Size of model weights (after) in bytes is: %s', (getsizeof(bytes_weights)))
-                    
+
                     with metrics.weights_sending_timer():
                         socket1.send(bytes_weights)
                         metrics.round.sent_to_fed += len(bytes_weights)
                         dummy = socket1.recv()
                         metrics.round.recv_from_fed += len(dummy)
 
-
-                    
                     # send dataset size for weighted avg
                     socket1.send(send_dataset_size)
                     metrics.round.sent_to_fed += len(send_dataset_size)
@@ -300,30 +242,25 @@ class Runner:
                     socket1.send(send_cut_layer_size)
                     metrics.round.sent_to_fed += len(send_dataset_size)
 
-                    '''
-                    ====================================================        
-                    RECEIVE GLOBAL MODEL FROM FED SERVER
-                    ====================================================
-                    '''
+                    # ====================================================        
+                    # RECEIVE GLOBAL MODEL FROM FED SERVER
+                    # ====================================================
+
                     with metrics.weights_receiving_timer():
                         global_weights = socket1.recv()
                         metrics.round.recv_from_fed += len(global_weights)
 
-                    
                     socket1.close()
                     context1.term()
 
                     print("Global weights recieved from fedServer")
                     print("Size of global model weights (before) in bytes is:", getsizeof(global_weights))
-                    
+
                     global_numpy_weights = convert.bytes_to_dict(global_weights)
                     print("Size of global model weights (after) in bytes is:", getsizeof(global_numpy_weights))
 
-                
                     #END ROUND_RUNNING_TIMER
                 metrics.reportRound(r, logger)
                 #END ROUND
             #END OVERALL_RUNNING_TIMER
         metrics.reportOverall(logger)
-
-#################################################################################################################################
