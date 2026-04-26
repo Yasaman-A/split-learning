@@ -7,7 +7,6 @@ import logging
 import os
 from sys import getsizeof
 
-import numpy as np
 import torch
 import torch.optim as optim
 from tqdm.auto import tqdm
@@ -32,7 +31,6 @@ class Runner:
         split_port = self.config["split_server"]["server_start_port"]+self.client_id-1
         fed_port = self.config["fed_server"]["server_start_port"]+self.client_id-1
         num_epochs = int(self.config["epoch"])
-        output_file = self.config["data_server"]["output_file"]
         rnd = self.config["round"]
         self.cut_layer = self.config["cut_layer"]
 

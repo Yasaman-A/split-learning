@@ -41,7 +41,7 @@ class Runner:
             device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 
-               #Initialize Logger
+        #Initialize Logger
         if self.config['logging']:
             log_path = os.path.join(
                     self.config.get("log_dir", "./"),
@@ -164,9 +164,6 @@ class Runner:
                             server_inputs = Variable(server_inputs, requires_grad=True)
                             outputs = server_model(server_inputs)
 
-                            with torch.no_grad():
-                                probs = torch.softmax(outputs, dim=1)
-
                             server_optimizer.zero_grad()
                             loss = criterion(outputs, labels)
                             loss.backward()
@@ -176,7 +173,7 @@ class Runner:
 
                             #send gradients back to client
                             transfer_loss = server_inputs.grad.clone().detach()
-                                #only contains grad for client layers
+                            #only contains grad for client layers
                             server_optimizer.step()
 
 

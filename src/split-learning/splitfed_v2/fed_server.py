@@ -48,12 +48,10 @@ class Runner:
         # Load architecture
         model_architecture = self.config.get("model_architecture", "ResNet18_CIFAR10")
         arch = get_architecture_bundle(model_architecture)
-        logits = self.config.get("logits", 10)
 
         data_prepper = DataPrep(self.config, arch)
         valloader = data_prepper.get_eval_loader("validation")
         testloader = data_prepper.get_eval_loader("testing")
-
 
         if self.config['logging']:
             log_path = os.path.join(
@@ -69,8 +67,6 @@ class Runner:
             logger.setLevel(logging.INFO)
             logging.info('Parameters (FED_SERVER_LOG) ---------- [TOTAL_CLIENTS --> {}, STARTING_SERVER_PORT --> {}, ROUNDS --> {}] ---------- '.format(
                 str(client_total), str(fed_port), str(rnd)))
-
-
 
         def average_weights(state_dicts, datasizes):
             """
@@ -251,7 +247,6 @@ class Runner:
 
                 #TEST SET - TRUE ACCURACY
 
-                # send dataset length
                 eval_step(testloader, serv_socket, arch, device, self.config, "testing")
 
                 serv_socket.close()
