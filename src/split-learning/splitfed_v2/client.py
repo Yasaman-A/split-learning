@@ -2,26 +2,22 @@
 arg1 --> CONFIG_FILE_PATH
 arg2 --> CLIENT_ID
 """
-import torchvision
-import torchvision.transforms as transforms
-import torch.nn as nn
-from torchvision import models
-import torch.optim as optim
-import time
-import zmq
-import torch
-from ..lib import convert
-from ..lib.transformed_dataset import TransformedDataset
-from ..lib.metrics import Metrics
-from ..architectures import get_architecture_bundle
-import os
-import urllib.request
-import pickle
-from sys import getsizeof
-import numpy as np
-import yaml
+
 import logging
+import os
+from sys import getsizeof
+
+import numpy as np
+import torch
+import torch.optim as optim
 from tqdm.auto import tqdm
+import yaml
+import zmq
+
+from ..architectures import get_architecture_bundle
+from ..lib import convert
+from ..lib.data_prep import DataPrep
+from ..lib.metrics import Metrics
 
 
 class Runner:
@@ -42,7 +38,6 @@ class Runner:
 
         model_architecture = self.config.get("model_architecture", "ResNet18_CIFAR10")
         arch = get_architecture_bundle(model_architecture)
-        logits = self.config.get("logits", 10)
 
         metrics = Metrics()
 
@@ -74,70 +69,13 @@ class Runner:
                 )
             print(device)
 
-            # Data Preparation
-
-            transformer = arch.training_transformer
-            batch_size = self.config["batch_size"]
-
-            # Data Splitting
-            match self.config["split_type"]:
-                case "n":  # No splitting. Use full dataset
-                    trainset = torchvision.datasets.CIFAR10(
-                        root="./data", train=True, download=True, transform=transformer
-                    )
-                    sampler = None
-                    shuffle = True
-
-                case "s":  # Use pre-defined split data
-                    if os.path.exists(output_file + str(self.client_id)):
-                        os.remove(output_file + str(self.client_id))
-
-                    print(self.config["data_server"]["server_address"] + "/" + output_file)
-                    urllib.request.urlretrieve(
-                        self.config["data_server"]["server_address"] + "/" + output_file,
-                        output_file + str(self.client_id),
-                    )
-
-                    with open(output_file + str(self.client_id), "rb") as handle:
-                        datasets = pickle.load(handle)
-                        dataset = datasets[self.client_id - 1]
-
-                    trainset = TransformedDataset(dataset, transformer)
-                    sampler = None
-                    shuffle = True
-
-                case "_":  # Split into 'split_type' number of blocks.
-                    trainset = torchvision.datasets.CIFAR10(
-                        root="./data", train=True, download=True, transform=transformer
-                    )
-                    dataset_size = len(trainset)
-                    total_indices = list(range(dataset_size))
-                    list_of_indices = np.array_split(
-                        total_indices, int(self.config["split_type"])
-                    )
-                    use_indices = list_of_indices[self.client_id]
-                    datasetsize_used = len(use_indices)
-                    print("use_indices:" + str(use_indices))
-
-                    sampler = torch.utils.data.SubsetRandomSampler(use_indices)
-                    shuffle = False
-
-            trainloader = torch.utils.data.DataLoader(
-                trainset,
-                batch_size=batch_size,
-                shuffle=shuffle,
-                sampler=sampler,
-                num_workers=2,
-                persistent_workers=True,
-            )
-            datasetsize_used = len(trainloader.dataset)
-
             config = {"cut_layer": self.config["cut_layer"], "logits": 10}
             client_model = arch.client(config).to(device)
-
             client_optimizer = optim.SGD(client_model.parameters(), lr=0.01, momentum=0.9)
 
-            # client_optimizer = optim.Adam(client_model.parameters(), lr=0.001)
+            data_prepper = DataPrep(self.config, arch, self.client_id)
+            trainloader = data_prepper.get_training_loader()
+            datasetsize_used = len(trainloader)
 
             num_rounds = rnd
 
@@ -147,11 +85,9 @@ class Runner:
         print(out)
         logging.info(out)
 
-        '''
-        ====================================================        
-        BEGIN TRAINING
-        ====================================================
-        '''
+        # ====================================================
+        # BEGIN TRAINING
+        # ====================================================
 
         term = False
 
@@ -201,7 +137,7 @@ class Runner:
 
                             dummy = socket.recv()
                             metrics.epoch.recv_from_split += len(dummy)
-                            
+
                             print(datasetsize_used)
                             send_dataset_size = str(datasetsize_used).encode()
                             socket.send(send_dataset_size)
@@ -210,8 +146,7 @@ class Runner:
                             dummy = socket.recv()
                             metrics.epoch.recv_from_split += len(dummy)
 
-                            
-                            
+
                             bar = tqdm(
                                 trainloader,
                                 desc=f"{r} {epoch}",
@@ -329,6 +264,3 @@ class Runner:
             #END OVERALL_RUNNING_TIMER
 
         metrics.reportOverall(logger)
-
-
-#################################################################################################################################

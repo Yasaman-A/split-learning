@@ -7,22 +7,22 @@ arg1 --> CONFIG_FILE_PATH
 """
 
 import copy
+import logging
+import os
 import threading
 import time
-import zmq
-import torch
-from ..lib import convert
-from ..lib.transformed_dataset import TransformedDataset
-from ..architectures import get_architecture_bundle
 from sys import getsizeof
+
+import torch
 import yaml
-import logging
-import torch.nn as nn
-from torchvision import models
-import os
-import urllib.request
-import pickle
+import zmq
 from tqdm.auto import tqdm
+
+from ..architectures import get_architecture_bundle
+from ..lib import convert
+from ..lib.data_prep import DataPrep
+from ..lib.transformed_dataset import TransformedDataset
+
 
 
 class Runner:
@@ -30,7 +30,7 @@ class Runner:
         with open(config_path, "r") as yamlfile:
             self.config = yaml.load(yamlfile, Loader=yaml.FullLoader)
             print("Read successful")
-    
+
     def run(self):
         client_total = self.config['client_total']
         fed_port = self.config['fed_server']['server_start_port']
@@ -45,61 +45,22 @@ class Runner:
                 else torch.device("cpu")
             )
 
-        output_file = self.config["data_server"]["output_file"]
-        val_file = output_file.replace(".pkl", "_val.pkl")
-        val_file_tmp = f"tmp_fed_{val_file}"
-
-        urllib.request.urlretrieve(
-            f"{self.config['data_server']['server_address']}/{val_file}", val_file_tmp
-        )
-
-        with open(val_file_tmp, "rb") as handle:
-            valset = pickle.load(handle)
-
-        output_file = self.config["data_server"]["output_file"]
-        test_file = output_file.replace(".pkl", "_test.pkl")
-        test_file_tmp = f"tmp_fed_{test_file}"
-        cut_layer = self.config["test_cut_layer"]
-
-        urllib.request.urlretrieve(
-            f"{self.config['data_server']['server_address']}/{test_file}", test_file_tmp
-        )
-
-        with open(test_file_tmp, "rb") as handle:
-            testset = pickle.load(handle)
-
         # Load architecture
         model_architecture = self.config.get("model_architecture", "ResNet18_CIFAR10")
         arch = get_architecture_bundle(model_architecture)
         logits = self.config.get("logits", 10)
 
-        transformer = arch.eval_transformer
+        data_prepper = DataPrep(self.config, arch)
+        valloader = data_prepper.get_eval_loader("validation")
+        testloader = data_prepper.get_eval_loader("testing")
 
-        valset = TransformedDataset(valset, transform=transformer)
-        testset = TransformedDataset(testset, transform=transformer)
 
-        valloader = torch.utils.data.DataLoader(
-            valset,
-            batch_size=self.config["batch_size"],
-            shuffle=False,
-            num_workers=0,
-            persistent_workers=False,
-        )
-
-        testloader = torch.utils.data.DataLoader(
-            testset,
-            batch_size=self.config["batch_size"],
-            shuffle=False,
-            num_workers=0,
-            persistent_workers=False,
-        )
-
-        if (self.config['logging']):
+        if self.config['logging']:
             log_path = os.path.join(
                 self.config.get("log_dir", "./"),
                 f"./cc_fed_server_{client_total}_{fed_port}_{rnd}.log"
             )
-            
+
             # Create and configure logger
             logging.basicConfig(filename=log_path,
                                 format='%(asctime)s %(message)s',
@@ -116,7 +77,7 @@ class Runner:
             Returns the average of the weights.
             """
             info = arch.client({"cut_layer" : self.config['cut_layer'], "logits": 10})
-            
+
             weights_avg = copy.deepcopy(state_dicts[0])
 
             for i, data in enumerate(datasizes):
@@ -130,13 +91,13 @@ class Runner:
                         weight_size_sum = 0
 
                         for state_idx, state_dict in enumerate(state_dicts):
-                            if (layer_idx <= self.config['cut_layer']):
+                            if layer_idx <= self.config['cut_layer']:
                                 weight_value += state_dict[key]
                                 weight_size_sum += datasizes[state_idx]
-                        
+
                         if weight_size_sum > 0:
                             weights_avg[key] = weight_value / weight_size_sum
-        
+
             return weights_avg
 
 
@@ -181,10 +142,10 @@ class Runner:
             logging.info(f"Size of global model weights (before) in bytes is: {getsizeof(client_global_weights)}")
 
             global_bytes_weights = convert.ordered_dict_to_bytes(client_global_weights)
-            
+
             print(f"Size of global model weights (after) in bytes is: {getsizeof(global_bytes_weights)}")
             logging.info(f"Size of Size of global model weights (after) in bytes is: {getsizeof(global_bytes_weights)}")
-            
+
             socket.send(global_bytes_weights)
             print(f"Weights sent to client {thread_no}")
             logging.info(f"Weights sent to client {thread_no}")
@@ -280,112 +241,71 @@ class Runner:
                 serv_socket.bind(serv_url)
                 print(f"listening on {serv_url}")
 
-                """
-                VAL SET - FOR EARLY STOPPING
-                """
 
-                val_iters = len(valloader)
-                send_val_iters = str(val_iters).encode()
-                serv_socket.send(send_val_iters)
-                serv_socket.recv()
+                # VAL SET - FOR EARLY STOPPING
 
-                test_config = {
-                    "cut_layer": int(self.config["test_cut_layer"]),
-                    "logits": logits,
-                }
-                test_model = arch.client(test_config).to(device)
-                test_model.load_state_dict(client_global_weights)
-
-                bar = tqdm(
-                    valloader,
-                    desc=f"valset: ",
-                    unit="",
-                    ascii=True,
-                    bar_format="{desc} {n_fmt}/{total_fmt} {percentage:3.0f}%|{bar}| {postfix}",
-                )
-
-                test_model.eval()
-
-                with torch.no_grad():
-                    for data in bar:
-                        inputs, labels = data[0].to(device), data[1].to(device)
-
-                        # send labels
-                        bytes_labels = convert.array_to_bytes(labels.cpu())
-                        serv_socket.send(bytes_labels)
-                        serv_socket.recv()
-
-                        # send activations
-                        activations = test_model(inputs)
-                        server_inputs = activations.detach().clone()
-                        bytes_server_inputs = convert.array_to_bytes(
-                            server_inputs.cpu()
-                        )
-
-                        serv_socket.send(bytes_server_inputs)
-                        serv_socket.recv()
+                eval_step(valloader, serv_socket, arch, device, self.config, "validation")
 
                 serv_socket.send(b"term?")
                 terminate = bool(int(serv_socket.recv().decode()))
 
-                """
-                TEST SET - TRUE ACCURACY
-                """
+                #TEST SET - TRUE ACCURACY
 
                 # send dataset length
-                test_iters = len(testloader)
-                send_test_iters = str(test_iters).encode()
-                serv_socket.send(send_test_iters)
-                serv_socket.recv()
-
-                test_config = {
-                    "cut_layer": int(self.config["test_cut_layer"]),
-                    "logits": logits,
-                }
-                test_model = arch.client(test_config).to(device)
-                test_model.load_state_dict(client_global_weights)
-
-                bar = tqdm(
-                    testloader,
-                    desc=f"testset: ",
-                    unit="",
-                    ascii=True,
-                    bar_format="{desc} {n_fmt}/{total_fmt} {percentage:3.0f}%|{bar}| {postfix}",
-                )
-
-                with torch.no_grad():
-                    for data in bar:
-                        inputs, labels = data[0].to(device), data[1].to(device)
-
-                        # send labels
-                        bytes_labels = convert.array_to_bytes(labels.cpu())
-                        serv_socket.send(bytes_labels)
-                        serv_socket.recv()
-
-                        # send activations
-                        activations = test_model(inputs)
-                        server_inputs = activations.detach().clone()
-                        bytes_server_inputs = convert.array_to_bytes(
-                            server_inputs.cpu()
-                        )
-
-                        serv_socket.send(bytes_server_inputs)
-                        serv_socket.recv()
-
-                test_model.train()
+                eval_step(testloader, serv_socket, arch, device, self.config, "testing")
 
                 serv_socket.close()
                 serv_context.term()
 
-
-
+                #Allow ZMQ to cleanup
                 if self.config['device'] != 'cpu': time.sleep(0.5)
-                
+
             print("All rounds ended..")
             logging.info("All rounds ended..")
-
-            
 
             context.term()
 
         main()
+
+
+
+
+def eval_step(loader, serv_socket, arch, device, config, eval_type):
+    """ Does a pass of the eval data over a sample aggregated model."""
+    iters = len(loader)
+    send_iters = str(iters).encode()
+    serv_socket.send(send_iters)
+    serv_socket.recv()
+
+    config = {"cut_layer": int(config["cut_layer"]), "logits": config['logits']}
+    test_model = arch.client(config).to(device)
+    test_model.load_state_dict(client_global_weights)
+
+    progress_bar = tqdm(
+        loader,
+        desc=f"{eval_type}: ",
+        unit="",
+        ascii=True,
+        bar_format="{desc} {n_fmt}/{total_fmt} {percentage:3.0f}%|{bar}| {postfix}",
+    )
+
+    test_model.eval()
+
+    with torch.no_grad():
+        for data in progress_bar:
+            inputs, labels = data[0].to(device), data[1].to(device)
+
+            # send labels
+            bytes_labels = convert.array_to_bytes(labels.cpu())
+            serv_socket.send(bytes_labels)
+            serv_socket.recv()
+
+            # send activations
+            activations = test_model(inputs)
+            server_inputs = activations.detach().clone()
+            bytes_server_inputs = convert.array_to_bytes(
+                server_inputs.cpu()
+            )
+
+            serv_socket.send(bytes_server_inputs)
+            serv_socket.recv()
