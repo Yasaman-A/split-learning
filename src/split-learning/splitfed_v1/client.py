@@ -6,9 +6,9 @@ import logging
 import os
 from sys import getsizeof
 
-from tqdm.auto import tqdm
 import torch
 from torch import optim
+from tqdm.auto import tqdm
 import yaml
 import zmq
 
