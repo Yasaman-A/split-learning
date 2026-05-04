@@ -102,6 +102,9 @@ class EfficientNetServer(nn.Module):
     def classify(self, x):
         return nn.functional.softmax(self.forward(x))
 
+    def change_cut(self, cut_layer):
+        self.cut_layer = cut_layer
+
 
 # DermaMNIST transforms: 28x28 RGB images, resize to 224x224 for EfficientNet
 # EfficientNet is designed for ImageNet (224x224), so we resize accordingly

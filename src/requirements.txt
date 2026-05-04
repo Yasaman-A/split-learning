@@ -4,7 +4,8 @@ Pillow==11.2.1
 PyYAML==6.0.2
 pyzmq==27.0.0
 fedartml==0.1.34
-#torch==2.6.0+cu126
-#torchvision==0.21.0+cu126
 tqdm==4.66.5
 scikit-learn
+medmnist
+torch==2.11.0
+torchvision==0.26.0

@@ -2,9 +2,9 @@ services:
   fed:
     image: split-learning
     network_mode: host
-    runtime: nvidia
-    gpus: all
-    command: python -m split-learning --mode splitfed_v1 --fed --config config.yaml
+    devices:
+      - nvidia.com/gpu=all
+    command: python -m split-learning --mode splitfed_v1_custom_cut --fed --config config.yaml
     working_dir: /src
     volumes:
       - ./logs:/src/logs
@@ -14,9 +14,9 @@ services:
   split:
     image: split-learning
     network_mode: host
-    runtime: nvidia
-    gpus: all
-    command: python -m split-learning --mode splitfed_v1 --server --config config.yaml
+    devices:
+      - nvidia.com/gpu=all
+    command: python -m split-learning --mode splitfed_v1_custom_cut --server --extra 4,4,4,4,4 --config config.yaml
     working_dir: /src
     volumes:
       - ./logs:/src/logs
@@ -28,9 +28,9 @@ services:
     network_mode: host
     cpus: 2
     mem_limit: 2g
-    runtime: nvidia
-    gpus: all
-    command: python -m split-learning --mode splitfed_v1 --client 1 --config config.yaml
+    devices:
+      - nvidia.com/gpu=all
+    command: python -m split-learning --mode splitfed_v1_custom_cut --client 1 --extra 4 --config config.yaml
     working_dir: /src
     volumes:
       - ./logs:/src/logs
@@ -42,9 +42,9 @@ services:
     network_mode: host
     cpus: 2
     mem_limit: 2g
-    runtime: nvidia
-    gpus: all
-    command: python -m split-learning --mode splitfed_v1 --client 2 --config config.yaml
+    devices:
+      - nvidia.com/gpu=all
+    command: python -m split-learning --mode splitfed_v1_custom_cut --client 2 --extra 4 --config config.yaml
     working_dir: /src
     volumes:
       - ./logs:/src/logs
@@ -56,9 +56,9 @@ services:
     network_mode: host
     cpus: 2
     mem_limit: 2g
-    runtime: nvidia
-    gpus: all
-    command: python -m split-learning --mode splitfed_v1 --client 3 --config config.yaml
+    devices:
+      - nvidia.com/gpu=all
+    command: python -m split-learning --mode splitfed_v1_custom_cut --client 3 --extra 4 --config config.yaml
     working_dir: /src
     volumes:
       - ./logs:/src/logs
@@ -71,9 +71,9 @@ services:
     network_mode: host
     cpus: 2
     mem_limit: 2g
-    runtime: nvidia
-    gpus: all
-    command: python -m split-learning --mode splitfed_v1 --client 4 --config config.yaml
+    devices:
+      - nvidia.com/gpu=all
+    command: python -m split-learning --mode splitfed_v1_custom_cut --client 4 --extra 4 --config config.yaml
     working_dir: /src
     volumes:
       - ./logs:/src/logs
@@ -86,9 +86,9 @@ services:
     network_mode: host
     cpus: 2
     mem_limit: 2g
-    runtime: nvidia
-    gpus: all
-    command: python -m split-learning --mode splitfed_v1 --client 5 --config config.yaml
+    devices:
+      - nvidia.com/gpu=all
+    command: python -m split-learning --mode splitfed_v1_custom_cut --client 5 --extra 4 --config config.yaml
     working_dir: /src
     volumes:
       - ./logs:/src/logs

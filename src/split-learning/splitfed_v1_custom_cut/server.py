@@ -1,9 +1,7 @@
 """
 arg1 --> CONFIG_FILE_PATH
 arg2..x --> cut layers for all clients
-"""
 
-"""
 arg1 --> total number of clients
 arg2 --> STARTING_PORT_NO
 arg3 --> 'cpu' or 'gpu'
@@ -14,23 +12,22 @@ arg7..x --> cut layers for all clients
 """
 
 # eg command: python server_splitnn_th_REPREQ.py 2 5555 cpu
-
-# from locale import atoi
-import copy
-import threading
-import torch.nn as nn
-from torchvision import models
-import torch.optim as optim
-from torch.autograd import Variable
-import time
-import zmq
-import torch
-from ..lib import convert
-from .custom_model_avg import custom_model_avg
-from ..architectures import get_architecture_bundle
-import yaml
 import logging
 import os
+import threading
+import time
+
+import torch.nn as nn
+from torch import optim
+from torch.autograd import Variable
+import torch
+import yaml
+import zmq
+
+from ..architectures import get_architecture_bundle
+from .custom_model_avg import custom_model_avg
+from ..lib import convert
+from ..lib.data_prep import DataPrep
 
 # from objsize import get_deep_size
 
@@ -55,6 +52,7 @@ class Runner:
         rnd = self.config["round"]
         muted = bool(self.config.get("muted", False))
         print(f"muted set to: {muted}")
+        test_last_model = self.config.get("test_last_model", False)
 
         # Load architecture
         model_architecture = self.config.get("model_architecture", "ResNet18_CIFAR10")
@@ -99,14 +97,6 @@ class Runner:
 
             socket.bind(url)
 
-            socket.recv()
-            if self.terminate:
-                socket.send(b"1")
-                socket.close()
-                return
-            else:
-                socket.send(b"0")
-
             model_config = {"cut_layer": cut_layer, "logits": logits}
             server_model = arch.server(model_config).to(device)
 
@@ -119,6 +109,16 @@ class Runner:
             if r > 0:
                 server_model.load_state_dict(server_global_weights)
                 print("GLOBAL_SERVER_WEIGHTS_LOADED")
+
+            socket.recv()
+            if self.terminate:
+                socket.send(b"1")
+                if test_last_model:
+                    test_client(device, server_model, socket, thread_no)
+                socket.close()
+                return
+            else:
+                socket.send(b"0")
 
             iterations = socket.recv()
             recv_iterations = int(iterations.decode())
@@ -193,51 +193,7 @@ class Runner:
                         f"***TH - {thread_no}***  SERVER_TOTAL_ONE_STEP_TIME = {total_one_step_time:.3f}, loss: {loss.item():.3f}"
                     )
 
-                ################################################################################
-                # TEST SET
 
-                # server_model.eval()
-
-                # correct = 0
-                # total = 0
-
-                # with torch.no_grad():
-                #     for j in range(test_iters):
-                #         #receive labels
-                #         recv_labels = socket.recv()
-                #         numpy_labels = convert.bytes_to_array(recv_labels)
-                #         labels = torch.from_numpy(numpy_labels)
-                #         labels = labels.to(device)
-
-                #         ##dummy......
-                #         socket.send(send_msg)
-
-                #         #get client activations
-                #         recv_serv_inputs = socket.recv()
-                #         numpy_server_inputs = convert.bytes_to_array(recv_serv_inputs)
-                #         server_inputs = torch.from_numpy(numpy_server_inputs)
-                #         server_inputs = server_inputs.to(device)
-
-                #         #dummy
-                #         socket.send(send_msg)
-
-                #         #forward pass
-                #         server_inputs = Variable(server_inputs, requires_grad=True)
-                #         outputs = server_model(server_inputs)
-
-                #         _, predicted = torch.max(outputs.data, 1)
-                #         correct += (predicted == labels).sum().item()
-                #         total += labels.size(0)
-
-                #     accuracy = 100 * correct / total if total > 0 else 0
-
-                #     socket.recv()
-                #     socket.send(str(accuracy).encode())
-                #     print(f" ***TH - {thread_no}*** Accuracy on test set for round {r} epoch {epoch}: {accuracy}%")
-                #     logging.info(f"***TH - {thread_no}*** Accuracy on test set for round {r} epoch {epoch}: {accuracy}%")
-                #     server_model.train()
-
-                ################################################################################
 
                 epoch_end_time = time.perf_counter()
                 total_one_epoch_time = epoch_end_time - epoch_start_time
@@ -250,6 +206,10 @@ class Runner:
 
                 ##################################################################################################################
 
+
+            if (test_last_model and r == rnd - 1):
+                test_client(device, server_model, socket, thread_no)
+         
             round_end_time = time.perf_counter()
             round_time = round_end_time - round_start_time
             print(
@@ -366,101 +326,11 @@ class Runner:
                 fed_socket.connect(fed_url)
                 print(f"Connected on {fed_url}")
 
-                """
-                VAL SET - FOR EARLY STOPING
-                """
-
-                fed_iters = int(fed_socket.recv().decode())
-                fed_socket.send(b"a")
-
-                test_config = {
-                    "cut_layer": self.config["test_cut_layer"],
-                    "logits": logits,
-                }
-                fed_model = arch.server(test_config).to(device)
-                fed_model.load_state_dict(server_global_weights)
-
-                correct = 0
-                total = 0
-                correct_per_class = torch.zeros(test_config["logits"], dtype=torch.long)
-                total_per_class = torch.zeros(test_config["logits"], dtype=torch.long)
-                confusion_matrix = torch.zeros(
-                    test_config["logits"], test_config["logits"], dtype=torch.int64
-                )
-
                 eval_time_start = time.perf_counter()
-                fed_model.eval()
-                with torch.no_grad():
-                    for j in range(fed_iters):
-                        # receive labels
-                        recv_labels = fed_socket.recv()
-                        numpy_labels = convert.bytes_to_array(recv_labels)
-                        labels = torch.from_numpy(numpy_labels)
-                        labels = labels.to(device)
 
-                        ##dummy......
-                        fed_socket.send("a".encode())
+                #VAL SET - FOR EARLY STOPING
 
-                        # get client activations
-                        recv_serv_inputs = fed_socket.recv()
-                        numpy_server_inputs = convert.bytes_to_array(recv_serv_inputs)
-                        server_inputs = torch.from_numpy(numpy_server_inputs)
-                        server_inputs = server_inputs.to(device)
-
-                        # dummy
-                        fed_socket.send("a".encode())
-
-                        # forward pass
-                        server_inputs = Variable(server_inputs, requires_grad=True)
-                        outputs = fed_model(server_inputs)
-                        _, predicted = torch.max(outputs.data, 1)
-
-                        # Flatten to 1D tensors to ensure consistent indexing
-                        predicted = predicted.view(-1)
-                        labels = labels.view(-1)
-
-                        correct += (predicted == labels).sum().item()
-                        total += labels.size(0)
-
-                        for class_idx in range(test_config["logits"]):
-                            mask = labels == class_idx
-                            total_per_class[class_idx] += mask.sum().item()
-                            if mask.any():  # Only index if mask has True values
-                                correct_per_class[class_idx] += (
-                                    (predicted[mask] == class_idx).sum().item()
-                                )
-
-                        for t, p in zip(labels, predicted):
-                            confusion_matrix[t.long(), p.long()] += 1
-
-                accuracy = (correct / total) * 100 if total > 0 else 0
-                per_class_accuracy = correct_per_class.float() / total_per_class.clamp(
-                    min=1
-                )
-
-                fed_model.train()
-
-                print("Class\tAccuracy")
-                logging.info("Class\tAccuracy")
-                for i, acc in enumerate(per_class_accuracy):
-                    print(
-                        f"{i}\t{acc*100:.4f} ({correct_per_class[i]}/{total_per_class[i]})"
-                    )
-                    logging.info(
-                        f"{i}\t{acc*100:.4f} ({correct_per_class[i]}/{total_per_class[i]})"
-                    )
-                print(f"Total Accuracy on VAL set for {r}: {accuracy}")
-                logging.info(f"Total Accuracy on VAL set for {r}: {accuracy}")
-
-                print("Confusion Matrix -- Val (rows=true, cols=pred):")
-                logging.info("Confusion Matrix -- Val (rows=true, cols=pred):")
-                for i in range(test_config["logits"]):
-                    row = " ".join(
-                        f"{confusion_matrix[i, j].item():4d}"
-                        for j in range(test_config["logits"])
-                    )
-                    print(row)
-                    logging.info(row)
+                accuracy = eval_step(arch, fed_socket, device, self.config, "Validation", r)
 
                 if accuracy > best_accuracy:
                     print(
@@ -485,101 +355,9 @@ class Runner:
                 else:
                     fed_socket.send(b"0")
 
-                """ 
-                TEST SET - TRUE ACCURACY
-                """
+                #TEST SET - TRUE ACCURACY
 
-                fed_iters = int(fed_socket.recv().decode())
-                fed_socket.send(b"a")
-
-                test_config = {
-                    "cut_layer": self.config["test_cut_layer"],
-                    "logits": logits,
-                }
-                fed_model = arch.server(test_config).to(device)
-                fed_model.load_state_dict(server_global_weights)
-
-                correct = 0
-                total = 0
-                correct_per_class = torch.zeros(test_config["logits"], dtype=torch.long)
-                total_per_class = torch.zeros(test_config["logits"], dtype=torch.long)
-                confusion_matrix = torch.zeros(
-                    test_config["logits"], test_config["logits"], dtype=torch.int64
-                )
-
-                eval_time_start = time.perf_counter()
-                fed_model.eval()
-                with torch.no_grad():
-                    for j in range(fed_iters):
-                        # receive labels
-                        recv_labels = fed_socket.recv()
-                        numpy_labels = convert.bytes_to_array(recv_labels)
-                        labels = torch.from_numpy(numpy_labels)
-                        labels = labels.to(device)
-
-                        ##dummy......
-                        fed_socket.send("a".encode())
-
-                        # get client activations
-                        recv_serv_inputs = fed_socket.recv()
-                        numpy_server_inputs = convert.bytes_to_array(recv_serv_inputs)
-                        server_inputs = torch.from_numpy(numpy_server_inputs)
-                        server_inputs = server_inputs.to(device)
-
-                        # dummy
-                        fed_socket.send("a".encode())
-
-                        # forward pass
-                        server_inputs = Variable(server_inputs, requires_grad=True)
-                        outputs = fed_model(server_inputs)
-                        _, predicted = torch.max(outputs.data, 1)
-
-                        # Flatten to 1D tensors to ensure consistent indexing
-                        predicted = predicted.view(-1)
-                        labels = labels.view(-1)
-
-                        correct += (predicted == labels).sum().item()
-                        total += labels.size(0)
-
-                        for class_idx in range(test_config["logits"]):
-                            mask = labels == class_idx
-                            total_per_class[class_idx] += mask.sum().item()
-                            if mask.any():  # Only index if mask has True values
-                                correct_per_class[class_idx] += (
-                                    (predicted[mask] == class_idx).sum().item()
-                                )
-
-                        for t, p in zip(labels, predicted):
-                            confusion_matrix[t.long(), p.long()] += 1
-
-                accuracy = (correct / total) * 100 if total > 0 else 0
-                per_class_accuracy = correct_per_class.float() / total_per_class.clamp(
-                    min=1
-                )
-
-                fed_model.train()
-
-                print("Class\tAccuracy")
-                logging.info("Class\tAccuracy")
-                for i, acc in enumerate(per_class_accuracy):
-                    print(
-                        f"{i}\t{acc*100:.4f} ({correct_per_class[i]}/{total_per_class[i]})"
-                    )
-                    logging.info(
-                        f"{i}\t{acc*100:.4f} ({correct_per_class[i]}/{total_per_class[i]})"
-                    )
-                print(f"Total Accuracy on TEST set for {r}: {accuracy}")
-                logging.info(f"Total Accuracy on TEST setfor {r}: {accuracy}")
-
-                print("Confusion Matrix -- Test (rows=true, cols=pred):")
-                logging.info("Confusion Matrix -- Test (rows=true, cols=pred):")
-                for i in range(test_config["logits"]):
-                    row = " ".join(
-                        f"{confusion_matrix[i, j].item():4d}"
-                        for j in range(test_config["logits"])
-                    )
-                    print(row)
-                    logging.info(row)
+                eval_step(arch, fed_socket, device, self.config, "testing", r)
 
                 fed_socket.close()
                 fed_context.term()
@@ -590,30 +368,6 @@ class Runner:
                 total_eval_time += eval_time
 
             print("All rounds ended..")
-
-            ############################ legacy code
-            # print("Sending to fed server...")
-            # fed_context = zmq.Context()
-            # fed_url = f"{self.config['fed_server']['server_ip']}:{self.config['fed_server']['server_start_port'] + client_total}"
-            # fed_socket = fed_context.socket(zmq.REQ)
-            # fed_socket.connect(fed_url)
-            # print(f"Connected on {fed_url}")
-
-            # bytes_weights = convert.ordered_dict_to_bytes(server_global_weights)
-            # fed_socket.send(bytes_weights)
-            # fed_socket.recv()
-            # print("Weights sent")
-
-            # print(server_global_exposure)
-
-            # bytes_exposure = convert.ordered_dict_to_bytes(server_global_exposure)
-            # fed_socket.send(bytes_exposure)
-            # fed_socket.recv()
-            # print("exposure sent")
-
-            # fed_socket.close()
-            # fed_context.term()
-            # print("socket closed")
 
             training_end_time = time.perf_counter()
             training_time = training_end_time - training_start_time
@@ -628,3 +382,123 @@ class Runner:
             context.term()
 
         main()
+
+
+def eval_step(arch, fed_socket, device, config, eval_type, r):
+
+    fed_iters = int(fed_socket.recv().decode())
+    fed_socket.send(b"a")
+
+    config = {"cut_layer": config['test_cut_layer'], "logits": config['logits']}
+    fed_model = arch.server(config).to(device)
+    fed_model.load_state_dict(server_global_weights)
+
+    correct = 0
+    total = 0
+    correct_per_class = torch.zeros(config['logits'], dtype=torch.long)
+    total_per_class   = torch.zeros(config['logits'], dtype=torch.long)
+    confusion_matrix = torch.zeros(config['logits'], config['logits'], dtype=torch.int64)
+
+    fed_model.eval()
+    with torch.no_grad():
+        for j in range(fed_iters):
+            #receive labels
+            recv_labels = fed_socket.recv()
+            numpy_labels = convert.bytes_to_array(recv_labels)
+            labels = torch.from_numpy(numpy_labels)
+            labels = labels.to(device)
+
+            ##dummy......
+            fed_socket.send("a".encode())
+
+            #get client activations
+            recv_serv_inputs = fed_socket.recv()
+            numpy_server_inputs = convert.bytes_to_array(recv_serv_inputs)
+            server_inputs = torch.from_numpy(numpy_server_inputs)
+            server_inputs = server_inputs.to(device)
+
+            #dummy
+            fed_socket.send("a".encode())
+
+            #forward pass
+            server_inputs = Variable(server_inputs, requires_grad=True)
+            outputs = fed_model(server_inputs)
+            _, predicted = torch.max(outputs.data, 1)
+
+            correct += (predicted == labels).sum().item()
+            total += labels.size(0)
+
+            for class_idx in range(config['logits']):
+                mask = labels == class_idx
+                total_per_class[class_idx] += mask.sum().item()
+                correct_per_class[class_idx] += (predicted[mask] == class_idx).sum().item()
+
+            for t, p in zip(labels.view(-1), predicted.view(-1)):
+                confusion_matrix[t.long(), p.long()] += 1
+
+    accuracy = (correct / total) * 100 if total > 0 else 0
+    per_class_accuracy = correct_per_class.float() / total_per_class.clamp(min=1)
+
+
+    print("Class\tAccuracy")
+    logging.info("Class\tAccuracy")
+    for i, acc in enumerate(per_class_accuracy):
+        print(f"{i}\t{acc*100:.4f} ({correct_per_class[i]}/{total_per_class[i]})")
+        logging.info(f"{i}\t{acc*100:.4f} ({correct_per_class[i]}/{total_per_class[i]})")
+    print(f"Total Accuracy on {eval_type} set for {r}: {accuracy}")
+    logging.info(f"Total Accuracy on {eval_type} set for {r}: {accuracy}")
+
+    print("Confusion Matrix -- {eval_type} (rows=true, cols=pred):")
+    logging.info("Confusion Matrix -- {eval_type} (rows=true, cols=pred):")
+    for i in range(config['logits']):
+        row = " ".join(f"{confusion_matrix[i, j].item():4d}" for j in range(config['logits']))
+        print(row)
+        logging.info(row)
+    return accuracy
+
+
+def test_client(device, server_model, socket, thread_no):
+    server_model.eval()
+
+    correct = 0
+    total = 0
+
+    test_iters = int(socket.recv().decode())
+    socket.send(b"a")
+
+
+    with torch.no_grad():
+        for j in range(test_iters):
+            #receive labels
+            recv_labels = socket.recv()
+            numpy_labels = convert.bytes_to_array(recv_labels)
+            labels = torch.from_numpy(numpy_labels)
+            labels = labels.to(device)
+
+            ##dummy......
+            socket.send(b"a")
+
+            #get client activations
+            recv_serv_inputs = socket.recv()
+            numpy_server_inputs = convert.bytes_to_array(recv_serv_inputs)
+            server_inputs = torch.from_numpy(numpy_server_inputs)
+            server_inputs = server_inputs.to(device)
+
+            #dummy
+            socket.send(b"a")
+
+            #forward pass
+            server_inputs = Variable(server_inputs, requires_grad=True)
+            outputs = server_model(server_inputs)
+
+            _, predicted = torch.max(outputs.data, 1)
+            correct += (predicted == labels).sum().item()
+            total += labels.size(0)
+
+        accuracy = 100 * correct / total if total > 0 else 0
+
+        socket.recv()
+        socket.send(str(accuracy).encode())
+        print(f" ***TH - {thread_no}*** Accuracy on test set: {accuracy}%")
+        logging.info(f"***TH - {thread_no}*** Accuracy on test set: {accuracy}%")
+        server_model.train()

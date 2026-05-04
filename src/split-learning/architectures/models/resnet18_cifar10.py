@@ -68,8 +68,12 @@ class ResNet18Server(nn.Module):
     def classify(self, x):
         return nn.functional.softmax(self.forward(x))
 
+    def change_cut(self, cut_layer):
+        self.cut_layer = cut_layer
+
 
 transformer = transforms.Compose(
+
     [
         transforms.RandomCrop(32, padding=4),
         transforms.RandomHorizontalFlip(),
