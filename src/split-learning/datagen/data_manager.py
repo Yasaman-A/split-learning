@@ -309,7 +309,7 @@ def create_iid_dataset(
     train, val = split_train_validation(train, val_fraction, seed)
 
     train_subsets = shuffle_and_split_iid_data(
-        train, test, val, num_clients, output_name
+        train, num_clients
     )
 
     preprocessed = []
@@ -340,7 +340,7 @@ def create_non_iid_dataset(
     train, val = split_train_validation(train, val_fraction, seed)
 
     train_subsets = split_non_iid_data(
-        train, test, val, num_clients, output_name, classes_per_client
+        train, num_clients, classes_per_client
     )
 
     preprocessed = []

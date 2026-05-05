@@ -21,6 +21,8 @@ This is a 2-client implementation of basic split learning, where the two clients
 
 - `python -m src.split-learning --mode rr_multiclient --server`
 - `python -m src.split-learning --mode rr_multiclient --client 1`
+- `python -m src.split-learning --mode rr_multiclient --client 2`
+- `etc`
 
 
 *TODO*: The current code does not devide the data among clients. 
@@ -237,7 +239,7 @@ Below are example commands to run in project `root` to use the various data spli
 **CIFAR-10 Examples:**
 ```bash
 python -m src.split-learning --generate --dataset_name cifar10 --data_type iid --num_clients 6
-python -m src.split-learning --generate --dataset_name cifar10 --data_type non-iid --num_clients 6 --classes_pc 2
+python -m src.split-learning --generate --dataset_name cifar10 --data_type non_iid --num_clients 6 --classes_pc 2
 python -m src.split-learning --generate --dataset_name cifar10 --data_type label_skew_dirichlet --alpha_label_split 0.1 --num_clients 3
 python -m src.split-learning --generate --dataset_name cifar10 --data_type label_skew_percentage --percentage_skew 0.5 --num_clients 2
 python -m src.split-learning --generate --dataset_name cifar10 --data_type feature_skew_dirichlet --alpha_feat_split 0.1 --num_clients 3
