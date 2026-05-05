@@ -95,6 +95,7 @@ class Runner:
             patience = 0
 
             training_start_time = time.perf_counter()
+            total_eval_time = 0
             for r in range(num_rounds):
                 print("New round started..")
 

@@ -82,17 +82,17 @@ class Runner:
                 super(ResNet18Client, self).__init__()
                 # Explain this line
                 self.cut_layer = config["cut_layer"]
+                self.logits = config["logits"]
 
                 # Explain this line
                 self.model = models.resnet18(pretrained=False)
 
-                self.model = nn.ModuleList(self.model.children())
-                self.model = nn.Sequential(*self.model)
-
-
                 num_ftrs = self.model.fc.in_features
                 self.model.fc = nn.Sequential(nn.Flatten(),
                                                   nn.Linear(num_ftrs, self.logits))
+
+                self.model = nn.ModuleList(self.model.children())
+                self.model = nn.Sequential(*self.model)
 
             # Explain forward (actually used during the execution of the neural network at runtime)
             def forward(self, x):
