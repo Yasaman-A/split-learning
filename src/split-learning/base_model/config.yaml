@@ -1,11 +1,10 @@
 logging: false
 log_steps: 50
 #cpu OR gpu
-device: gpu
+device: cpu
 cut_layer: 3
-epoch: 2
+epoch: 5
 batch_size: 128
-logits: 10
 # n for no_split, s: for getting split i from data server, Any number for the number of i.i.d splits.
 split_type: s
 split_server: 
