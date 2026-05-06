@@ -26,8 +26,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -70,6 +70,12 @@ coverage.xml
 # Django stuff:
 *.log
 local_settings.py
+
+# Training run outputs (per-run subdirectories under logs/, not the
+# bookkeeping scripts that live directly in logs/)
+logs/*/
+logs/.run_id
+**/checkpoint_r*.json
 db.sqlite3
 db.sqlite3-journal
 
